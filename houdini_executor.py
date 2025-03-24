@@ -42,11 +42,11 @@ class HoudiniExecutor:
         dirs = dirs.to(target_device)
 
         self.generator = sample_frustum(dirs=dirs, poses=poses, batch_size=batch_size, randomize=True, device=target_device)
-        self.encoder_d = encoder_d
-        self.model_d = model_d
+        self.encoder_d = torch.compile(encoder_d)
+        self.model_d = torch.compile(model_d)
         self.optimizer_d = optimizer_d
-        self.encoder_v = encoder_v
-        self.model_v = model_v
+        self.encoder_v = torch.compile(encoder_v)
+        self.model_v = torch.compile(model_v)
         self.optimizer_v = optimizer_v
         self.videos_data_resampled = videos_data_resampled
         self.target_device = target_device
