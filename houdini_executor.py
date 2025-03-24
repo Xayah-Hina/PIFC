@@ -160,8 +160,11 @@ class HoudiniExecutor:
         return True
 
     def save_ckpt(self, directory: str):
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%m%d%H')
+        filename = 'ckpt_{}_bs{}_{:06d}.tar'.format(timestamp, self.batch_size, self.global_step)
         os.makedirs(directory, exist_ok=True)
-        path = os.path.join(directory, 'den_{:06d}.tar'.format(self.global_step))
+        path = os.path.join(directory, filename)
         torch.save({
             'global_step': self.global_step,
             'model_d': self.model_d.state_dict(),
@@ -181,36 +184,39 @@ class HoudiniExecutor:
         self.model_v.load_state_dict(checkpoint['model_v'])
         self.encoder_v.load_state_dict(checkpoint['encoder_v'])
         self.optimizer_v.load_state_dict(checkpoint['optimizer_v'])
+        print(f"loaded checkpoint from {path}")
 
-    def sample_density_grid(self, resx, resy, resz, time):
-        xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
-        coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
-        coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
-        input_xyzt_flat = torch.cat([coord_3d_world, torch.ones_like(coord_3d_world[..., :1]) * time], dim=-1).reshape(-1, 4)
-        raw_d_flat_list = []
-        batch_size = 64 * 64 * 64
-        for i in range(0, input_xyzt_flat.shape[0], batch_size):
-            input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
-            raw_d_flat_batch = self.model_d(self.encoder_d(input_xyzt_flat_batch))
-            raw_d_flat_list.append(raw_d_flat_batch)
-        raw_d_flat = torch.cat(raw_d_flat_list, dim=0)
-        raw_d = raw_d_flat.reshape(resx, resy, resz, 1)
-        return raw_d
+    def sample_density_grid(self, resx, resy, resz, frame):
+        with torch.no_grad():
+            xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
+            coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
+            coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
+            input_xyzt_flat = torch.cat([coord_3d_world, torch.ones_like(coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
+            raw_d_flat_list = []
+            batch_size = 64 * 64 * 64
+            for i in range(0, input_xyzt_flat.shape[0], batch_size):
+                input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
+                raw_d_flat_batch = self.model_d(self.encoder_d(input_xyzt_flat_batch))
+                raw_d_flat_list.append(raw_d_flat_batch)
+            raw_d_flat = torch.cat(raw_d_flat_list, dim=0)
+            raw_d = raw_d_flat.reshape(resx, resy, resz, 1)
+            return raw_d.to(torch.device('cpu'))
 
-    def sample_velocity_grid(self, resx, resy, resz, time):
-        xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
-        coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
-        coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
-        input_xyzt_flat = torch.cat([coord_3d_world, torch.ones_like(coord_3d_world[..., :1]) * time], dim=-1).reshape(-1, 4)
-        raw_vel_flat_list = []
-        batch_size = 64 * 64 * 64
-        for i in range(0, input_xyzt_flat.shape[0], batch_size):
-            input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
-            raw_vel_flat_batch, _ = self.model_v(self.encoder_v(input_xyzt_flat_batch))[0]
-            raw_vel_flat_list.append(raw_vel_flat_batch)
-        raw_vel_flat = torch.cat(raw_vel_flat_list, dim=0)
-        raw_vel = raw_vel_flat.reshape(resx, resy, resz, 3)
-        return raw_vel
+    def sample_velocity_grid(self, resx, resy, resz, frame):
+        with torch.no_grad():
+            xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
+            coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
+            coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
+            input_xyzt_flat = torch.cat([coord_3d_world, torch.ones_like(coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
+            raw_vel_flat_list = []
+            batch_size = 64 * 64 * 64
+            for i in range(0, input_xyzt_flat.shape[0], batch_size):
+                input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
+                raw_vel_flat_batch, _ = self.model_v(self.encoder_v(input_xyzt_flat_batch))
+                raw_vel_flat_list.append(raw_vel_flat_batch)
+            raw_vel_flat = torch.cat(raw_vel_flat_list, dim=0)
+            raw_vel = raw_vel_flat.reshape(resx, resy, resz, 3)
+            return raw_vel.to(torch.device('cpu'))
 
     def sample_points(self, resx, resy, resz):
         xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
@@ -219,9 +225,13 @@ class HoudiniExecutor:
         return coord_3d_world.to(torch.device('cpu'))
 
 
+import tqdm
+
 if __name__ == '__main__':
     torch.set_float32_matmul_precision('high')
     executor = HoudiniExecutor(batch_size=1024, depth_size=192, ratio=0.5, target_device=torch.device("cuda:0"), target_dtype=torch.float32)
+    pbar = tqdm.tqdm(desc="Running forward_1_iter", unit="iter")
     while executor.forward_1_iter():
-        pass
+        pbar.update(1)
+    pbar.close()
     executor.save_ckpt('ckpt')
