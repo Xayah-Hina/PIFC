@@ -4,6 +4,7 @@ from model.encoder_hyfluid import *
 from model.model_hyfluid import *
 
 import math
+import tqdm
 
 
 class DensityOnlyExecutor:
@@ -72,7 +73,8 @@ class DensityOnlyExecutor:
         img_loss.backward()
         self.optimizer_d.step()
         self.scheduler.step()
-        print(f"iter: {self.global_step}, lr: {self.scheduler.get_last_lr()[0]}, img_loss: {img_loss}")
+        self.global_step += 1
+        tqdm.tqdm.write(f"iter: {self.global_step}, lr: {self.scheduler.get_last_lr()[0]}, img_loss: {img_loss}")
 
     @torch.compile
     def density_only_loss(self, batch_indices, batch_rays_o, batch_rays_d):
@@ -142,7 +144,7 @@ class DensityOnlyExecutor:
         self.model_v.load_state_dict(checkpoint['model_v'])
         self.encoder_v.load_state_dict(checkpoint['encoder_v'])
         self.optimizer_v.load_state_dict(checkpoint['optimizer_v'])
-        print(f"loaded checkpoint from {path}")
+        tqdm.tqdm.write(f"loaded checkpoint from {path}")
 
     @torch.compile
     def sample_density_grid(self, resx, resy, resz, frame):
@@ -160,6 +162,14 @@ class DensityOnlyExecutor:
             raw_d_flat = torch.cat(raw_d_flat_list, dim=0)
             raw_d = raw_d_flat.reshape(resx, resy, resz, 1)
             return raw_d.to(torch.device('cpu'))
+
+    @torch.compile
+    def sample_points(self, resx, resy, resz):
+        with torch.no_grad():
+            xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
+            coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
+            coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
+            return coord_3d_world.to(torch.device('cpu'))
 
 
 class HoudiniExecutor:
@@ -385,7 +395,6 @@ class HoudiniExecutor:
         return coord_3d_world.to(torch.device('cpu'))
 
 
-import tqdm
 
 
 def run_train():
