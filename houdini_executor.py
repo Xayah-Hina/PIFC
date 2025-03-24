@@ -42,11 +42,11 @@ class HoudiniExecutor:
         dirs = dirs.to(target_device)
 
         self.generator = sample_frustum(dirs=dirs, poses=poses, batch_size=batch_size, randomize=True, device=target_device)
-        self.encoder_d = torch.compile(encoder_d)
-        self.model_d = torch.compile(model_d)
+        self.encoder_d = encoder_d
+        self.model_d = model_d
         self.optimizer_d = optimizer_d
-        self.encoder_v = torch.compile(encoder_v)
-        self.model_v = torch.compile(model_v)
+        self.encoder_v = encoder_v
+        self.model_v = model_v
         self.optimizer_v = optimizer_v
         self.videos_data_resampled = videos_data_resampled
         self.target_device = target_device
@@ -186,6 +186,7 @@ class HoudiniExecutor:
         self.optimizer_v.load_state_dict(checkpoint['optimizer_v'])
         print(f"loaded checkpoint from {path}")
 
+    @torch.compile
     def sample_density_grid(self, resx, resy, resz, frame):
         with torch.no_grad():
             xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
@@ -202,6 +203,7 @@ class HoudiniExecutor:
             raw_d = raw_d_flat.reshape(resx, resy, resz, 1)
             return raw_d.to(torch.device('cpu'))
 
+    @torch.compile
     def sample_velocity_grid(self, resx, resy, resz, frame):
         with torch.no_grad():
             xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
@@ -227,11 +229,25 @@ class HoudiniExecutor:
 
 import tqdm
 
-if __name__ == '__main__':
+
+def run_train():
     torch.set_float32_matmul_precision('high')
     executor = HoudiniExecutor(batch_size=1024, depth_size=192, ratio=0.5, target_device=torch.device("cuda:0"), target_dtype=torch.float32)
     pbar = tqdm.tqdm(desc="Running forward_1_iter", unit="iter")
     while executor.forward_1_iter():
         pbar.update(1)
     pbar.close()
-    executor.save_ckpt('ckpt')
+    executor.save_ckpt('houdini/ckpt')
+
+def run_sample_grids():
+    torch.set_float32_matmul_precision('high')
+    executor = HoudiniExecutor(batch_size=1024, depth_size=192, ratio=0.5, target_device=torch.device("cuda:0"), target_dtype=torch.float32)
+    executor.load_ckpt('houdini/ckpt/den_002533.tar')
+    raw_d = executor.sample_density_grid(64, 64, 64, 0)
+    raw_vel = executor.sample_velocity_grid(64, 64, 64, 0)
+    print(raw_d.shape, raw_vel.shape)
+
+
+if __name__ == '__main__':
+    # run_train()
+    run_sample_grids()
