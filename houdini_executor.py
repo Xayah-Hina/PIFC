@@ -1,5 +1,3 @@
-import torch
-
 from lib.dataset import *
 from lib.frustum import *
 from model.encoder_hyfluid import *
@@ -31,6 +29,7 @@ class HoudiniExecutor:
         NEAR_float, FAR_float = float(near[0].item()), float(far[0].item())
 
         self.s_w2s = torch.inverse(VOXEL_TRAN).expand([4, 4])
+        self.s2w = torch.inverse(self.s_w2s)
         self.s_scale = VOXEL_SCALE.expand([3])
         self.s_min = torch.tensor([0.15, 0.0, 0.15], device=target_device, dtype=target_dtype)
         self.s_max = torch.tensor([0.85, 1.0, 0.85], device=target_device, dtype=target_dtype)
@@ -69,7 +68,10 @@ class HoudiniExecutor:
         self.optimizer_d.zero_grad()
         self.optimizer_v.zero_grad()
 
-        batch_indices, batch_rays_o, batch_rays_d = next(self.generator)
+        try:
+            batch_indices, batch_rays_o, batch_rays_d = next(self.generator)
+        except StopIteration:
+            return False
         batch_time, batch_target_pixels = sample_random_frame(videos_data=self.videos_data_resampled, batch_indices=batch_indices, device=self.target_device, dtype=self.target_dtype)
 
         batch_size_current = batch_rays_d.shape[0]
@@ -135,7 +137,7 @@ class HoudiniExecutor:
 
         if nse_errors.sum() > 10000:
             print(f'skip large loss {nse_errors.sum():.3g}, timestep={batch_points_time_flat_filtered[0, 3]}')
-            return
+            return True
 
         vel_loss = nseloss_fine + 10000 * img_loss + 1.0 * proj_loss + 10.0 * min_vel_reg
         vel_loss.backward()
@@ -153,9 +155,9 @@ class HoudiniExecutor:
 
         self.global_step += 1
 
-        print(f"nseloss_fine: {nseloss_fine}, img_loss: {10000 * img_loss}, proj_loss: {proj_loss}, min_vel_reg: {10.0 * min_vel_reg}, vel_loss: {vel_loss}")
+        print(f"iter: {self.global_step}, nseloss_fine: {nseloss_fine}, img_loss: {10000 * img_loss}, proj_loss: {proj_loss}, min_vel_reg: {10.0 * min_vel_reg}, vel_loss: {vel_loss}")
 
-        return vel_loss.item()
+        return True
 
     def save_ckpt(self, directory: str):
         os.makedirs(directory, exist_ok=True)
@@ -180,8 +182,46 @@ class HoudiniExecutor:
         self.encoder_v.load_state_dict(checkpoint['encoder_v'])
         self.optimizer_v.load_state_dict(checkpoint['optimizer_v'])
 
+    def sample_density_grid(self, resx, resy, resz, time):
+        xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
+        coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
+        coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
+        input_xyzt_flat = torch.cat([coord_3d_world, torch.ones_like(coord_3d_world[..., :1]) * time], dim=-1).reshape(-1, 4)
+        raw_d_flat_list = []
+        batch_size = 64 * 64 * 64
+        for i in range(0, input_xyzt_flat.shape[0], batch_size):
+            input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
+            raw_d_flat_batch = self.model_d(self.encoder_d(input_xyzt_flat_batch))
+            raw_d_flat_list.append(raw_d_flat_batch)
+        raw_d_flat = torch.cat(raw_d_flat_list, dim=0)
+        raw_d = raw_d_flat.reshape(resx, resy, resz, 1)
+        return raw_d
+
+    def sample_velocity_grid(self, resx, resy, resz, time):
+        xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
+        coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
+        coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
+        input_xyzt_flat = torch.cat([coord_3d_world, torch.ones_like(coord_3d_world[..., :1]) * time], dim=-1).reshape(-1, 4)
+        raw_vel_flat_list = []
+        batch_size = 64 * 64 * 64
+        for i in range(0, input_xyzt_flat.shape[0], batch_size):
+            input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
+            raw_vel_flat_batch, _ = self.model_v(self.encoder_v(input_xyzt_flat_batch))[0]
+            raw_vel_flat_list.append(raw_vel_flat_batch)
+        raw_vel_flat = torch.cat(raw_vel_flat_list, dim=0)
+        raw_vel = raw_vel_flat.reshape(resx, resy, resz, 3)
+        return raw_vel
+
+    def sample_points(self, resx, resy, resz):
+        xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
+        coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
+        coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
+        return coord_3d_world.to(torch.device('cpu'))
+
 
 if __name__ == '__main__':
     torch.set_float32_matmul_precision('high')
     executor = HoudiniExecutor(batch_size=1024, depth_size=192, ratio=0.5, target_device=torch.device("cuda:0"), target_dtype=torch.float32)
-    print(f"loss: {executor.forward_1_iter()}")
+    while executor.forward_1_iter():
+        pass
+    executor.save_ckpt('ckpt')
