@@ -316,6 +316,7 @@ def run_train_density_only():
 def run_train_joint():
     torch.set_float32_matmul_precision('high')
     executor = HoudiniExecutor(batch_size=1024, depth_size=192, ratio=0.5, target_device=torch.device("cuda:0"), target_dtype=torch.float32)
+    executor.load_ckpt('houdini/ckpt_den_only/ckpt_032512_bs1024_100001.tar')
     pbar = tqdm.tqdm(desc="run_train_joint", unit="iter")
     try:
         for _ in range(1000):
