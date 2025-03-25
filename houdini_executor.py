@@ -7,6 +7,78 @@ import math
 import tqdm
 
 
+def binary_dilation_3d(input_grid: torch.Tensor, extrapolate: int) -> torch.Tensor:
+    """
+    对3D布尔张量执行binary dilation操作，膨胀范围为extrapolate个体素单位。
+
+    参数:
+        input_grid: Bool tensor of shape [D, H, W]
+        extrapolate: int, 膨胀半径（比如2表示周围2格都扩展）
+
+    返回:
+        扩展后的布尔张量，shape 同 input_grid
+    """
+    assert input_grid.dim() == 3, "Input must be a 3D tensor"
+
+    # 将输入变成 [N, C, D, H, W]，符合 conv3d 格式
+    input_tensor = input_grid.unsqueeze(0).unsqueeze(0).float()  # shape: [1,1,D,H,W]
+
+    # 创建 3D 卷积核：立方体核，全1，表示邻域
+    kernel_size = 2 * extrapolate + 1
+    kernel = torch.ones((1, 1, kernel_size, kernel_size, kernel_size), device=input_tensor.device)
+
+    # 卷积，padding 保持尺寸
+    dilated = torch.nn.functional.conv3d(input_tensor, kernel, padding=extrapolate)
+
+    # 将所有大于0的地方设为 True（即只要邻域内有True，就扩展为True）
+    output = (dilated > 0).squeeze(0).squeeze(0).bool()  # 回到 [D, H, W]
+
+    return output
+
+
+def get_valid_mask(points: torch.Tensor, valid_mask: torch.Tensor, low_point: torch.Tensor, high_point: torch.Tensor) -> torch.Tensor:
+    """
+    判断每个点是否落入有效体素格子中（valid_mask 为 True）。
+
+    参数:
+        points: [N, 3] 的点，float，空间在 (low_point, high_point)
+        valid_mask: [resx, resy, resz] 的布尔张量
+        low_point: [3] 的下界张量 (x_min, y_min, z_min)
+        high_point: [3] 的上界张量 (x_max, y_max, z_max)
+
+    返回:
+        mask: [N] 的布尔张量，True 表示点落在有效格子中
+    """
+    resx, resy, resz = valid_mask.shape
+    device = points.device
+
+    # 归一化到 [0, 1]
+    normed = (points - low_point) / (high_point - low_point)
+
+    # 转换成整数索引
+    indices = (normed * torch.tensor([resx, resy, resz], device=device)).long()
+
+    # 过滤越界的索引
+    inside_box = ((indices[:, 0] >= 0) & (indices[:, 0] < resx) &
+                  (indices[:, 1] >= 0) & (indices[:, 1] < resy) &
+                  (indices[:, 2] >= 0) & (indices[:, 2] < resz))
+
+    # 为避免越界，先将超出部分都设置为0索引（稍后再用 inside_box 掩码屏蔽）
+    clamped_indices = torch.stack([
+        torch.clamp(indices[:, 0], 0, resx - 1),
+        torch.clamp(indices[:, 1], 0, resy - 1),
+        torch.clamp(indices[:, 2], 0, resz - 1),
+    ], dim=1)
+
+    # 查询 valid_mask 值
+    is_valid = valid_mask[clamped_indices[:, 0], clamped_indices[:, 1], clamped_indices[:, 2]]
+
+    # 只有在 box 内并且对应 grid 是 True 才算 valid
+    mask = inside_box & is_valid
+
+    return mask
+
+
 class HoudiniExecutor:
     def __init__(self, batch_size: int, depth_size: int, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
         videos_data = load_videos_data(*training_videos, ratio=ratio, dtype=target_dtype)
@@ -57,14 +129,32 @@ class HoudiniExecutor:
 
         self.refresh_generator()
 
+        self.oges = []
+        self.load_oges('houdini/occupancy_grid')
+
     def refresh_generator(self):
         dirs, u, v = shuffle_uv(focals=self.focals, width=int(self.width[0].item()), height=int(self.height[0].item()), randomize=True, device=torch.device("cpu"), dtype=self.target_dtype)
         dirs = dirs.to(self.target_device)
         self.videos_data_resampled = resample_frames(frames=self.videos_data, u=u, v=v).to(self.target_device)  # (T, V, H, W, C)
         self.generator = sample_frustum(dirs=dirs, poses=self.poses, batch_size=self.batch_size, randomize=True, device=self.target_device)
 
+    def load_oges(self, oges_dir):
+        self.oges = []
+        for frame in range(120):
+            oge = np.load(os.path.join(oges_dir, f'oge{frame:03d}.npy'))
+            self.oges.append(torch.tensor(oge, device=self.target_device, dtype=torch.bool))
+
     def get_mask(self, batch_points):
         return insideMask(batch_points, self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+
+    def get_mask_with_oge(self, batch_points, frame):
+        mask1 = insideMask(batch_points, self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+        frame_floor = math.floor(frame)
+        frame_ceil = math.ceil(frame)
+        oge = self.oges[frame_floor] | self.oges[frame_ceil]
+        points_sim = world2sim(batch_points, self.s_w2s, self.s_scale)
+        mask2 = get_valid_mask(points_sim, oge, self.s_min, self.s_max)
+        return mask1 & mask2
 
     def optimize_density(self):
         self.optimizer_d.zero_grad()
@@ -200,6 +290,7 @@ class HoudiniExecutor:
         nseloss_fine = nse_errors * split_nse_wei
 
         proj_loss = torch.zeros_like(nseloss_fine)
+        min_vel_reg = torch.zeros_like(nseloss_fine)
 
         viz_dens_mask = raw_d.detach() > 0.1
         vel_norm = raw_vel.norm(dim=-1, keepdim=True)
@@ -289,6 +380,15 @@ class HoudiniExecutor:
             coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
             return coord_3d_world.to(torch.device('cpu'))
 
+    # @torch.compile
+    def get_filtered_occupancy_grid(self, threshold, frame, extrapolate):
+        with torch.no_grad():
+            resx, resy, resz = 128, 128, 128
+            occupancy_grid = self.sample_density_grid(resx, resy, resz, frame) > threshold
+
+            occupancy_grid_extrapolated = binary_dilation_3d(occupancy_grid.squeeze(-1), extrapolate)
+            return occupancy_grid_extrapolated
+
 
 def run_sample_grids(ckpt_path):
     torch.set_float32_matmul_precision('high')
@@ -302,11 +402,9 @@ def run_sample_grids(ckpt_path):
 def run_train_density_only():
     torch.set_float32_matmul_precision('high')
     executor = HoudiniExecutor(batch_size=1024, depth_size=192, ratio=0.5, target_device=torch.device("cuda:0"), target_dtype=torch.float32)
-    pbar = tqdm.tqdm(desc="run_train_density_only", unit="iter")
     try:
-        for _ in range(1000):
+        for _ in tqdm.trange(1000):
             executor.optimize_density()
-            pbar.update(1)
     except Exception as e:
         print(e)
     finally:
@@ -317,18 +415,27 @@ def run_train_joint():
     torch.set_float32_matmul_precision('high')
     executor = HoudiniExecutor(batch_size=1024, depth_size=192, ratio=0.5, target_device=torch.device("cuda:0"), target_dtype=torch.float32)
     executor.load_ckpt('houdini/ckpt_den_only/ckpt_032512_bs1024_100001.tar')
-    pbar = tqdm.tqdm(desc="run_train_joint", unit="iter")
     try:
-        for _ in range(1000):
+        for _ in tqdm.trange(1000):
             executor.optimize_joint()
-            pbar.update(1)
     except Exception as e:
         print(e)
     finally:
         executor.save_ckpt('houdini/ckpt_joint')
 
 
+def compute_filtered_occupancy_grids():
+    torch.set_float32_matmul_precision('high')
+    executor = HoudiniExecutor(batch_size=1024, depth_size=192, ratio=0.5, target_device=torch.device("cuda:0"), target_dtype=torch.float32)
+    executor.load_ckpt('houdini/ckpt_den_only/ckpt_032512_bs1024_100001.tar')
+    os.makedirs("houdini/occupancy_grid", exist_ok=True)
+    for frame in tqdm.trange(120):
+        occupancy_grid_extrapolated = executor.get_filtered_occupancy_grid(5, frame, 2)
+        np.save(f'houdini/occupancy_grid/oge{frame:03d}.npy', occupancy_grid_extrapolated.numpy())
+
+
 if __name__ == '__main__':
     # run_train_density_only()
     run_train_joint()
     # run_sample_grids('houdini/ckpt/den_002533.tar')
+    # compute_filtered_occupancy_grids()

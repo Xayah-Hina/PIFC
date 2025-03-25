@@ -158,8 +158,16 @@ def insideMask(inputs_pts, s_w2s, s_scale, s_min, s_max, to_float=False):
     mask = isInside(inputs_pts, s_w2s, s_scale, s_min, s_max)
     return mask.to(torch.float) if to_float else mask
 
+
 def sim2world(pts_sim, s2w, s_scale):
     pts_sim_ = pts_sim * s_scale
     pts_sim_homo = torch.cat([pts_sim_, torch.ones_like(pts_sim_[..., :1])], dim=-1)
     pts_world = torch.matmul(s2w, pts_sim_homo[..., None]).squeeze(-1)[..., :3]
     return pts_world
+
+
+def world2sim(pts_world, s_w2s, s_scale):
+    pts_world_homo = torch.cat([pts_world, torch.ones_like(pts_world[..., :1])], dim=-1)
+    pts_sim_ = torch.matmul(s_w2s, pts_world_homo[..., None]).squeeze(-1)[..., :3]
+    pts_sim = pts_sim_ / s_scale  # 3.target to 2.simulation
+    return pts_sim
