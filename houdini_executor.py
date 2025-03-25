@@ -63,6 +63,9 @@ class HoudiniExecutor:
         self.videos_data_resampled = resample_frames(frames=self.videos_data, u=u, v=v).to(self.target_device)  # (T, V, H, W, C)
         self.generator = sample_frustum(dirs=dirs, poses=self.poses, batch_size=self.batch_size, randomize=True, device=self.target_device)
 
+    def get_mask(self, batch_points):
+        return insideMask(batch_points, self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+
     def optimize_density(self):
         self.optimizer_d.zero_grad()
         try:
@@ -85,15 +88,16 @@ class HoudiniExecutor:
         except StopIteration:
             self.refresh_generator()
             batch_indices, batch_rays_o, batch_rays_d = next(self.generator)
-        nseloss_fine, img_loss, proj_loss, min_vel_reg = self.velocity_loss(batch_indices, batch_rays_o, batch_rays_d)
-        vel_loss = nseloss_fine + 10000 * img_loss + 1.0 * proj_loss + 10.0 * min_vel_reg
-        vel_loss.backward()
-        self.optimizer_d.step()
-        self.optimizer_v.step()
-        self.scheduler_d.step()
-        self.scheduler_v.step()
-        self.global_step += 1
-        tqdm.tqdm.write(f"iter: {self.global_step}, lr_d: {self.scheduler_d.get_last_lr()[0]}, lr_v: {self.scheduler_v.get_last_lr()[0]}, nseloss_fine: {nseloss_fine}, img_loss: {img_loss}, proj_loss: {proj_loss}, min_vel_reg: {min_vel_reg}")
+        skip, nseloss_fine, img_loss, proj_loss, min_vel_reg = self.velocity_loss(batch_indices, batch_rays_o, batch_rays_d)
+        if not skip:
+            vel_loss = nseloss_fine + 10000 * img_loss + 1.0 * proj_loss + 10.0 * min_vel_reg
+            vel_loss.backward()
+            self.optimizer_d.step()
+            self.optimizer_v.step()
+            self.scheduler_d.step()
+            self.scheduler_v.step()
+            self.global_step += 1
+            tqdm.tqdm.write(f"iter: {self.global_step}, lr_d: {self.scheduler_d.get_last_lr()[0]}, lr_v: {self.scheduler_v.get_last_lr()[0]}, nseloss_fine: {nseloss_fine}, img_loss: {img_loss}, proj_loss: {proj_loss}, min_vel_reg: {min_vel_reg}")
 
     @torch.compile
     def density_only_loss(self, batch_indices, batch_rays_o, batch_rays_d):
@@ -116,7 +120,7 @@ class HoudiniExecutor:
         batch_points_time = torch.cat([batch_points, batch_time.expand(batch_points[..., :1].shape)], dim=-1)
         batch_points_time_flat = batch_points_time.reshape(-1, 4)
 
-        bbox_mask = insideMask(batch_points_time_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+        bbox_mask = self.get_mask(batch_points_time_flat[..., :3])
         batch_points_time_flat_filtered = batch_points_time_flat[bbox_mask]
 
         hidden = self.encoder_d(batch_points_time_flat_filtered)
@@ -161,7 +165,7 @@ class HoudiniExecutor:
         batch_points_time = torch.cat([batch_points, batch_time.expand(batch_points[..., :1].shape)], dim=-1)
         batch_points_time_flat = batch_points_time.reshape(-1, 4)
 
-        bbox_mask = insideMask(batch_points_time_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+        bbox_mask = self.get_mask(batch_points_time_flat[..., :3])
         batch_points_time_flat_filtered = batch_points_time_flat[bbox_mask]
         batch_points_time_flat_filtered.requires_grad = True
 
@@ -204,10 +208,11 @@ class HoudiniExecutor:
         min_vel_reg_map = (0.2 * raw_d - vel_norm) * vel_reg_mask.float()
         min_vel_reg = min_vel_reg_map.pow(2).mean()
 
+        skip = False
         if nse_errors.sum() > 10000:
             print(f'skip large loss {nse_errors.sum():.3g}, timestep={batch_points_time_flat_filtered[0, 3]}')
-            return True
-        return nseloss_fine, img_loss, proj_loss, min_vel_reg
+            skip = True
+        return skip, nseloss_fine, img_loss, proj_loss, min_vel_reg
 
     def save_ckpt(self, directory: str):
         from datetime import datetime
@@ -243,6 +248,8 @@ class HoudiniExecutor:
             coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
             coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
             input_xyzt_flat = torch.cat([coord_3d_world, torch.ones_like(coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
+            bbox_mask = self.get_mask(input_xyzt_flat[..., :3])
+
             raw_d_flat_list = []
             batch_size = 64 * 64 * 64
             for i in range(0, input_xyzt_flat.shape[0], batch_size):
@@ -250,6 +257,7 @@ class HoudiniExecutor:
                 raw_d_flat_batch = self.model_d(self.encoder_d(input_xyzt_flat_batch))
                 raw_d_flat_list.append(raw_d_flat_batch)
             raw_d_flat = torch.cat(raw_d_flat_list, dim=0)
+            raw_d_flat[~bbox_mask] = 0.0
             raw_d = raw_d_flat.reshape(resx, resy, resz, 1)
             return raw_d.to(torch.device('cpu'))
 
@@ -260,6 +268,8 @@ class HoudiniExecutor:
             coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
             coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
             input_xyzt_flat = torch.cat([coord_3d_world, torch.ones_like(coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
+            bbox_mask = self.get_mask(input_xyzt_flat[..., :3])
+
             raw_vel_flat_list = []
             batch_size = 64 * 64 * 64
             for i in range(0, input_xyzt_flat.shape[0], batch_size):
@@ -267,6 +277,7 @@ class HoudiniExecutor:
                 raw_vel_flat_batch, _ = self.model_v(self.encoder_v(input_xyzt_flat_batch))
                 raw_vel_flat_list.append(raw_vel_flat_batch)
             raw_vel_flat = torch.cat(raw_vel_flat_list, dim=0)
+            raw_vel_flat[~bbox_mask] = 0.0
             raw_vel = raw_vel_flat.reshape(resx, resy, resz, 3)
             return raw_vel.to(torch.device('cpu'))
 
