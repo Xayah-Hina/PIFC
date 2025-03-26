@@ -139,3 +139,30 @@ def load_cameras_data(*cameras_paths, ratio, device: torch.device, dtype: torch.
     heights = heights * ratio
 
     return poses, focals, widths, heights, nears, fars
+
+
+def load_rotating_camera_data(*cameras_paths, ratio, device: torch.device, dtype: torch.dtype):
+    if not cameras_paths:
+        raise ValueError("No cameras paths provided.")
+
+    valid_paths = []
+    for camera_path in cameras_paths:
+        _path = os.path.normpath(camera_path)
+        if not Path(_path).exists():
+            raise FileNotFoundError(f"Camera path {_path} does not exist.")
+        valid_paths.append(_path)
+
+    import numpy as np
+    camera_infos = [np.load(path) for path in valid_paths]
+    poses = torch.stack([torch.tensor(info["cam_transform"], device=device, dtype=dtype) for info in camera_infos])
+    focals = torch.stack([torch.tensor(info["focal"] * info["width"] / info["aperture"], device=device, dtype=dtype) for info in camera_infos])
+    widths = torch.stack([torch.tensor(info["width"], device=device, dtype=torch.int32) for info in camera_infos])
+    heights = torch.stack([torch.tensor(info["height"], device=device, dtype=torch.int32) for info in camera_infos])
+    nears = torch.stack([torch.tensor(info["near"], device=device, dtype=dtype) for info in camera_infos])
+    fars = torch.stack([torch.tensor(info["far"], device=device, dtype=dtype) for info in camera_infos])
+
+    focals = focals * ratio
+    widths = widths * ratio
+    heights = heights * ratio
+
+    return poses, focals, widths, heights, nears, fars

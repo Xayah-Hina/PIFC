@@ -131,6 +131,7 @@ class HoudiniExecutor:
 
         self.oges = []
         self.load_oges('houdini/occupancy_grid')
+        self.load_oges('occupancy_grid')
 
     def refresh_generator(self):
         dirs, u, v = shuffle_uv(focals=self.focals, width=int(self.width[0].item()), height=int(self.height[0].item()), randomize=True, device=torch.device("cpu"), dtype=self.target_dtype)
@@ -147,10 +148,8 @@ class HoudiniExecutor:
     def get_mask(self, batch_points):
         return insideMask(batch_points, self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
 
-    def get_mask_with_oge(self, batch_points, frame):
+    def get_mask_with_oge(self, batch_points, frame_floor, frame_ceil):
         mask1 = insideMask(batch_points, self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
-        frame_floor = math.floor(frame)
-        frame_ceil = math.ceil(frame)
         oge = self.oges[frame_floor] | self.oges[frame_ceil]
         points_sim = world2sim(batch_points, self.s_w2s, self.s_scale)
         mask2 = get_valid_mask(points_sim, oge, self.s_min, self.s_max)
@@ -256,6 +255,7 @@ class HoudiniExecutor:
         batch_points_time_flat = batch_points_time.reshape(-1, 4)
 
         bbox_mask = self.get_mask(batch_points_time_flat[..., :3])
+        # bbox_mask = self.get_mask_with_oge(batch_points_time_flat[..., :3], (batch_time * 120).item())
         batch_points_time_flat_filtered = batch_points_time_flat[bbox_mask]
         batch_points_time_flat_filtered.requires_grad = True
 
@@ -333,13 +333,16 @@ class HoudiniExecutor:
         tqdm.tqdm.write(f"loaded checkpoint from {path}")
 
     @torch.compile
-    def sample_density_grid(self, resx, resy, resz, frame):
+    def sample_density_grid(self, resx, resy, resz, frame, use_oge=False):
         with torch.no_grad():
             xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
             coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
             coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
             input_xyzt_flat = torch.cat([coord_3d_world, torch.ones_like(coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
-            bbox_mask = self.get_mask(input_xyzt_flat[..., :3])
+            if use_oge:
+                bbox_mask = self.get_mask_with_oge(input_xyzt_flat[..., :3], frame, frame)
+            else:
+                bbox_mask = self.get_mask(input_xyzt_flat[..., :3])
 
             raw_d_flat_list = []
             batch_size = 64 * 64 * 64
@@ -353,13 +356,16 @@ class HoudiniExecutor:
             return raw_d.to(torch.device('cpu'))
 
     @torch.compile
-    def sample_velocity_grid(self, resx, resy, resz, frame):
+    def sample_velocity_grid(self, resx, resy, resz, frame, use_oge=False):
         with torch.no_grad():
             xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
             coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
             coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
             input_xyzt_flat = torch.cat([coord_3d_world, torch.ones_like(coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
-            bbox_mask = self.get_mask(input_xyzt_flat[..., :3])
+            if use_oge:
+                bbox_mask = self.get_mask_with_oge(input_xyzt_flat[..., :3], frame, frame)
+            else:
+                bbox_mask = self.get_mask(input_xyzt_flat[..., :3])
 
             raw_vel_flat_list = []
             batch_size = 64 * 64 * 64
@@ -430,12 +436,12 @@ def compute_filtered_occupancy_grids():
     executor.load_ckpt('houdini/ckpt_den_only/ckpt_032512_bs1024_100001.tar')
     os.makedirs("houdini/occupancy_grid", exist_ok=True)
     for frame in tqdm.trange(120):
-        occupancy_grid_extrapolated = executor.get_filtered_occupancy_grid(5, frame, 2)
+        occupancy_grid_extrapolated = executor.get_filtered_occupancy_grid(5, frame, 5)
         np.save(f'houdini/occupancy_grid/oge{frame:03d}.npy', occupancy_grid_extrapolated.numpy())
 
 
 if __name__ == '__main__':
-    # run_train_density_only()
-    run_train_joint()
+    run_train_density_only()
+    # run_train_joint()
     # run_sample_grids('houdini/ckpt/den_002533.tar')
     # compute_filtered_occupancy_grids()
