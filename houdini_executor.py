@@ -129,9 +129,9 @@ class HoudiniExecutor:
 
         self.refresh_generator()
 
-        self.oges = []
-        self.load_oges('houdini/occupancy_grid')
-        self.load_oges('occupancy_grid')
+        # self.oges = []
+        # self.load_oges('houdini/occupancy_grid')
+        # self.load_oges('occupancy_grid')
 
     def refresh_generator(self):
         dirs, u, v = shuffle_uv(focals=self.focals, width=int(self.width[0].item()), height=int(self.height[0].item()), randomize=True, device=torch.device("cpu"), dtype=self.target_dtype)
@@ -290,7 +290,7 @@ class HoudiniExecutor:
         nseloss_fine = nse_errors * split_nse_wei
 
         proj_loss = torch.zeros_like(nseloss_fine)
-        min_vel_reg = torch.zeros_like(nseloss_fine)
+        # min_vel_reg = torch.zeros_like(nseloss_fine)
 
         viz_dens_mask = raw_d.detach() > 0.1
         vel_norm = raw_vel.norm(dim=-1, keepdim=True)
