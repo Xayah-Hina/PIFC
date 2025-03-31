@@ -276,22 +276,23 @@ def train_density_only(total_iter, batch_size, depth_size, ratio, target_device,
 
 def validate_sample_grid(resx, resy, resz, target_device, target_dtype, ckpt_path):
     model = ValidationModel(ckpt_path, target_device, target_dtype)
+    os.makedirs('ckpt/sampled_grid', exist_ok=True)
     for frame in tqdm.trange(120):
         raw_d = model.sample_density_grid(resx, resy, resz, frame)
         raw_v = model.sample_velocity_grid(resx, resy, resz, frame)
-        np.savez_compressed(f'ckpt/sampled_grid/sampled_grid_{frame:03d}.npy', den=raw_d.cpu().numpy(), vel=raw_v.cpu().numpy())
+        np.savez_compressed(f'ckpt/sampled_grid/sampled_grid_{frame+1:03d}.npz', den=raw_d.cpu().numpy(), vel=raw_v.cpu().numpy())
 
 
 if __name__ == "__main__":
-    # option - train_density_only
-    train_density_only(
-        total_iter=1000,
-        batch_size=1024,
-        depth_size=192,
-        ratio=0.5,
-        target_device=torch.device("cuda:0"),
-        target_dtype=torch.float32,
-    )
+    # # option - train_density_only
+    # train_density_only(
+    #     total_iter=1000,
+    #     batch_size=1024,
+    #     depth_size=192,
+    #     ratio=0.5,
+    #     target_device=torch.device("cuda:0"),
+    #     target_dtype=torch.float32,
+    # )
 
     # option - validate_sample_grid
     validate_sample_grid(
