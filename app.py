@@ -1,9 +1,9 @@
-import torch
 from lib.dataset import *
 from lib.frustum import *
 from model.encoder_hyfluid import *
 from model.model_hyfluid import *
 
+import torch
 import math
 import tqdm
 import os
@@ -74,7 +74,9 @@ class TrainModel:
         self.scheduler_d.step()
         self.global_step += 1
         tqdm.tqdm.write(f"iter: {self.global_step}, lr_d: {self.scheduler_d.get_last_lr()[0]}, img_loss: {img_loss}")
+        return img_loss
 
+    @torch.compile
     def image_loss(self, batch_indices, batch_rays_o, batch_rays_d, depth_size: int, near: float, far: float):
         batch_time, batch_target_pixels = sample_random_frame(videos_data=self.videos_data_resampled, batch_indices=batch_indices, device=self.target_device, dtype=self.target_dtype)
         batch_size_current = batch_rays_d.shape[0]
@@ -149,16 +151,52 @@ class TrainModel:
 
 
 def train_density_only(total_iter, batch_size, depth_size, ratio, target_device, target_dtype, pretrained_ckpt=None):
+    losses = []
+    steps = []
+    avg_losses = []
+    avg_steps = []
+
     model = TrainModel(batch_size, ratio, target_device, target_dtype)
     if pretrained_ckpt:
         model.load_ckpt(pretrained_ckpt)
     try:
         for _ in tqdm.trange(total_iter):
-            model.optimize_density(depth_size)
+            img_loss = model.optimize_density(depth_size)
+            losses.append(img_loss.item())  # 获取 tensor 的数值
+            steps.append(model.global_step)
+
+            if len(losses) % 100 == 0:
+                avg_loss = sum(losses[-100:]) / 100
+                avg_losses.append(avg_loss)
+                avg_steps.append(model.global_step)
+
     except Exception as e:
         print(e)
     finally:
-        model.save_ckpt('houdini/ckpt_joint')
+        model.save_ckpt('ckpt/train_density_only')
+
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%m%d%H")
+        filename = f"loss_train_density_only_{timestamp}_bs{batch_size}_{model.global_step}.png"
+        save_dir = 'ckpt/image'
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, filename)
+
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(8, 6))
+        plt.plot(avg_steps, avg_losses, label='Average Image Loss (every 100 steps)', color='blue', linestyle='-', marker='o')
+        plt.xlabel('Global Step')
+        plt.ylabel('Image Loss (Averaged)')
+        plt.title('Average Image Loss vs. Global Step')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+        # 保存图片
+        plt.savefig(save_path)
+        plt.close()
+
+        print(f"Image loss curve saved to {save_path}")
 
 
 if __name__ == "__main__":
