@@ -51,10 +51,10 @@ class TrainModel:
         self.global_step = 0
 
     def _load_model(self, target_device: torch.device):
-        self.encoder_d = HashEncoderNativeFasterBackward().to(target_device)
+        self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
         self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
         self.optimizer_d = torch.optim.RAdam([{'params': self.model_d.parameters(), 'weight_decay': 1e-6}, {'params': self.encoder_d.parameters(), 'eps': 1e-15}], lr=0.001, betas=(0.9, 0.99))
-        self.encoder_v = HashEncoderNativeFasterBackward().to(target_device)
+        self.encoder_v = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
         self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
         self.optimizer_v = torch.optim.RAdam([{'params': self.model_v.parameters(), 'weight_decay': 1e-6}, {'params': self.encoder_v.parameters(), 'eps': 1e-15}], lr=0.001, betas=(0.9, 0.99))
 
@@ -324,9 +324,9 @@ class ValidationModel:
         self.target_dtype = target_dtype
 
     def _load_model(self, target_device: torch.device):
-        self.encoder_d = HashEncoderNativeFasterBackward().to(target_device)
+        self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
         self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
-        self.encoder_v = HashEncoderNativeFasterBackward().to(target_device)
+        self.encoder_v = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
         self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
 
     def _load_valid_domain(self, target_device: torch.device, target_dtype: torch.dtype):
