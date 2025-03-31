@@ -345,7 +345,6 @@ class ValidationModel:
 
     def load_ckpt(self, path: str):
         checkpoint = torch.load(path)
-        self.global_step = checkpoint['global_step']
         self.model_d.load_state_dict(checkpoint['model_d'])
         self.encoder_d.load_state_dict(checkpoint['encoder_d'])
         self.model_v.load_state_dict(checkpoint['model_v'])
@@ -391,6 +390,10 @@ class ValidationModel:
             raw_vel_flat[~bbox_mask] = 0.0
             raw_vel = raw_vel_flat.reshape(resx, resy, resz, 3)
             return raw_vel
+
+    def resimulation(self, resx, resy, resz, dt):
+        with torch.no_grad():
+            source_height = 0.15
 
 
 def train_density_only(total_iter, batch_size, depth_size, ratio, target_device, target_dtype, pretrained_ckpt=None):
@@ -613,46 +616,51 @@ def validate_sample_grid(resx, resy, resz, target_device, target_dtype, ckpt_pat
 
 
 if __name__ == "__main__":
-    option = "validate_sample_grid"
+    import argparse
+    parser = argparse.ArgumentParser(description="Run training or validation.")
+    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity_only', 'train_joint', 'validate_sample_grid'], required=True, help="Choose the operation to execute.")
+    parser.add_argument('--ckpt_path', type=str, required=True, help="Path to the checkpoint.")
+    parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
+    args = parser.parse_args()
 
-    if option == "train_density_only":
+    if args.option == "train_density_only":
         train_density_only(
             total_iter=1000,
             batch_size=1024,
             depth_size=192,
             ratio=0.5,
-            target_device=torch.device("cuda:0"),
+            target_device=torch.device(args.device),
             target_dtype=torch.float32,
-            pretrained_ckpt=None,
+            pretrained_ckpt=args.ckpt_path,
         )
 
-    if option == "train_velocity_only":
+    if args.option == "train_velocity_only":
         train_velocity_only(
             total_iter=1000,
             batch_size=1024,
             ratio=0.5,
-            target_device=torch.device("cuda:0"),
+            target_device=torch.device(args.device),
             target_dtype=torch.float32,
-            pretrained_ckpt='ckpt/train_density_only/ckpt_033120_bs1024_100000.tar'
+            pretrained_ckpt=args.ckpt_path,
         )
 
-    if option == "train_joint":
+    if args.option == "train_joint":
         train_joint(
             total_iter=1000,
             batch_size=1024,
             depth_size=192,
             ratio=0.5,
-            target_device=torch.device("cuda:0"),
+            target_device=torch.device(args.device),
             target_dtype=torch.float32,
-            pretrained_ckpt=None,
+            pretrained_ckpt=args.ckpt_path,
         )
 
-    if option == "validate_sample_grid":
+    if args.option == "validate_sample_grid":
         validate_sample_grid(
             resx=128,
             resy=192,
             resz=128,
-            target_device=torch.device("cuda:0"),
+            target_device=torch.device(args.device),
             target_dtype=torch.float32,
-            ckpt_path='ckpt/train_velocity_only/ckpt_033123_bs1024_100998.tar',
+            ckpt_path=args.ckpt_path,
         )
