@@ -305,15 +305,19 @@ class TrainModel:
         }, path)
 
     def load_ckpt(self, path: str):
-        checkpoint = torch.load(path)
-        self.global_step = checkpoint['global_step']
-        self.model_d.load_state_dict(checkpoint['model_d'])
-        self.encoder_d.load_state_dict(checkpoint['encoder_d'])
-        self.optimizer_d.load_state_dict(checkpoint['optimizer_d'])
-        self.model_v.load_state_dict(checkpoint['model_v'])
-        self.encoder_v.load_state_dict(checkpoint['encoder_v'])
-        self.optimizer_v.load_state_dict(checkpoint['optimizer_v'])
-        tqdm.tqdm.write(f"loaded checkpoint from {path}")
+        try:
+            checkpoint = torch.load(path)
+            self.global_step = checkpoint['global_step']
+            self.model_d.load_state_dict(checkpoint['model_d'])
+            self.encoder_d.load_state_dict(checkpoint['encoder_d'])
+            self.optimizer_d.load_state_dict(checkpoint['optimizer_d'])
+            self.model_v.load_state_dict(checkpoint['model_v'])
+            self.encoder_v.load_state_dict(checkpoint['encoder_v'])
+            self.optimizer_v.load_state_dict(checkpoint['optimizer_v'])
+            tqdm.tqdm.write(f"loaded checkpoint from {path}")
+            print("Model loaded successfully!")
+        except Exception as e:
+            print(f"Error loading model: {e}")
 
 
 class ValidationModel:
@@ -344,12 +348,15 @@ class ValidationModel:
         self.s_max = torch.tensor([0.85, 1.0, 0.85], device=target_device, dtype=target_dtype)
 
     def load_ckpt(self, path: str):
-        checkpoint = torch.load(path)
-        self.model_d.load_state_dict(checkpoint['model_d'])
-        self.encoder_d.load_state_dict(checkpoint['encoder_d'])
-        self.model_v.load_state_dict(checkpoint['model_v'])
-        self.encoder_v.load_state_dict(checkpoint['encoder_v'])
-        tqdm.tqdm.write(f"loaded checkpoint from {path}")
+        try:
+            checkpoint = torch.load(path)
+            self.model_d.load_state_dict(checkpoint['model_d'])
+            self.encoder_d.load_state_dict(checkpoint['encoder_d'])
+            self.model_v.load_state_dict(checkpoint['model_v'])
+            self.encoder_v.load_state_dict(checkpoint['encoder_v'])
+            tqdm.tqdm.write(f"loaded checkpoint from {path}")
+        except Exception as e:
+            print(f"Error loading model: {e}")
 
     @torch.compile
     def sample_density_grid(self, resx, resy, resz, frame):
@@ -617,6 +624,7 @@ def validate_sample_grid(resx, resy, resz, target_device, target_dtype, ckpt_pat
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Run training or validation.")
     parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity_only', 'train_joint', 'validate_sample_grid'], required=True, help="Choose the operation to execute.")
     parser.add_argument('--ckpt_path', type=str, required=True, help="Path to the checkpoint.")
