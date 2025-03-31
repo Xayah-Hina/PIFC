@@ -317,19 +317,11 @@ class TrainModel:
 
 
 class ValidationModel:
-    def __init__(self, ckpt_path, target_device: torch.device, target_dtype: torch.dtype):
+    def __init__(self, target_device: torch.device, target_dtype: torch.dtype):
         self._load_model(target_device)
         self._load_valid_domain(target_device, target_dtype)
         self.target_device = target_device
         self.target_dtype = target_dtype
-
-        checkpoint = torch.load(ckpt_path)
-        self.global_step = checkpoint['global_step']
-        self.model_d.load_state_dict(checkpoint['model_d'])
-        self.encoder_d.load_state_dict(checkpoint['encoder_d'])
-        self.model_v.load_state_dict(checkpoint['model_v'])
-        self.encoder_v.load_state_dict(checkpoint['encoder_v'])
-        tqdm.tqdm.write(f"loaded checkpoint from {ckpt_path}")
 
     def _load_model(self, target_device: torch.device):
         self.encoder_d = HashEncoderNativeFasterBackward().to(target_device)
@@ -350,6 +342,15 @@ class ValidationModel:
         self.s_scale = VOXEL_SCALE.expand([3])
         self.s_min = torch.tensor([0.15, 0.0, 0.15], device=target_device, dtype=target_dtype)
         self.s_max = torch.tensor([0.85, 1.0, 0.85], device=target_device, dtype=target_dtype)
+
+    def load_ckpt(self, path: str):
+        checkpoint = torch.load(path)
+        self.global_step = checkpoint['global_step']
+        self.model_d.load_state_dict(checkpoint['model_d'])
+        self.encoder_d.load_state_dict(checkpoint['encoder_d'])
+        self.model_v.load_state_dict(checkpoint['model_v'])
+        self.encoder_v.load_state_dict(checkpoint['encoder_v'])
+        tqdm.tqdm.write(f"loaded checkpoint from {path}")
 
     @torch.compile
     def sample_density_grid(self, resx, resy, resz, frame):
@@ -443,10 +444,12 @@ def train_velocity_only(total_iter, batch_size, ratio, target_device, target_dty
     losses_nseloss_fine = []
     losses_proj = []
     losses_min_vel_reg = []
+    losses = []
     steps = []
     avg_losses_nseloss_fine = []
     avg_losses_proj = []
     avg_losses_min_vel_reg = []
+    ave_losses = []
     avg_steps = []
 
     model = TrainModel(batch_size, ratio, target_device, target_dtype)
@@ -464,15 +467,18 @@ def train_velocity_only(total_iter, batch_size, ratio, target_device, target_dty
             losses_nseloss_fine.append(nseloss_fine.item())
             losses_proj.append(proj_loss.item())
             losses_min_vel_reg.append(min_vel_reg.item())
+            losses.append(nseloss_fine.item() + proj_loss.item() + min_vel_reg.item())
             steps.append(model.global_step)
 
             if len(steps) % 100 == 0:
                 avg_loss_nseloss_fine = sum(losses_nseloss_fine[-100:]) / 100
                 avg_loss_proj = sum(losses_proj[-100:]) / 100
                 avg_loss_min_vel_reg = sum(losses_min_vel_reg[-100:]) / 100
+                avg_loss = sum(losses[-100:]) / 100
                 avg_losses_nseloss_fine.append(avg_loss_nseloss_fine)
                 avg_losses_proj.append(avg_loss_proj)
                 avg_losses_min_vel_reg.append(avg_loss_min_vel_reg)
+                ave_losses.append(avg_loss)
                 avg_steps.append(model.global_step)
     except Exception as e:
         print(e)
@@ -491,7 +497,8 @@ def train_velocity_only(total_iter, batch_size, ratio, target_device, target_dty
         loss_data = [
             ("nseloss_fine", avg_steps, avg_losses_nseloss_fine, 'red', 'Average NSE Loss Fine (every 100 steps)'),
             ("proj_loss", avg_steps, avg_losses_proj, 'green', 'Average Proj Loss (every 100 steps)'),
-            ("min_vel_reg", avg_steps, avg_losses_min_vel_reg, 'purple', 'Average Min Vel Reg Loss (every 100 steps)')
+            ("min_vel_reg", avg_steps, avg_losses_min_vel_reg, 'purple', 'Average Min Vel Reg Loss (every 100 steps)'),
+            ('total_loss', avg_steps, ave_losses, 'blue', 'Average Total Loss (every 100 steps)')
         ]
 
         # 绘制并保存四个独立的损失曲线
@@ -596,7 +603,8 @@ def train_joint(total_iter, batch_size, depth_size, ratio, target_device, target
 
 
 def validate_sample_grid(resx, resy, resz, target_device, target_dtype, ckpt_path):
-    model = ValidationModel(ckpt_path, target_device, target_dtype)
+    model = ValidationModel(target_device, target_dtype)
+    model.load_ckpt(ckpt_path)
     os.makedirs('ckpt/sampled_grid', exist_ok=True)
     for frame in tqdm.trange(120):
         raw_d = model.sample_density_grid(resx, resy, resz, frame)
@@ -646,5 +654,5 @@ if __name__ == "__main__":
             resz=128,
             target_device=torch.device("cuda:0"),
             target_dtype=torch.float32,
-            ckpt_path='ckpt/train_density_only/ckpt_033120_bs1024_100000.tar',
+            ckpt_path='ckpt/train_velocity_only/ckpt_033123_bs1024_100998.tar',
         )
