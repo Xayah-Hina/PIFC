@@ -1,5 +1,3 @@
-import numpy as np
-
 from lib.dataset import *
 from lib.frustum import *
 from model.encoder_hyfluid import *
@@ -78,6 +76,26 @@ class TrainModel:
         tqdm.tqdm.write(f"iter: {self.global_step}, lr_d: {self.scheduler_d.get_last_lr()[0]}, img_loss: {img_loss}")
         return img_loss
 
+    def optimize_joint(self, depth_size: int):
+        self.optimizer_d.zero_grad()
+        self.optimizer_v.zero_grad()
+        try:
+            batch_indices, batch_rays_o, batch_rays_d = next(self.generator)
+        except StopIteration:
+            self.generator, self.videos_data_resampled = refresh_generator(self.batch_size, self.videos_data, self.poses, self.focals, int(self.width[0].item()), int(self.height[0].item()), self.target_device, self.target_dtype)
+            batch_indices, batch_rays_o, batch_rays_d = next(self.generator)
+        skip, nseloss_fine, img_loss, proj_loss, min_vel_reg = self.joint_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
+        if not skip:
+            vel_loss = nseloss_fine + 10000 * img_loss + 1.0 * proj_loss + 10.0 * min_vel_reg
+            vel_loss.backward()
+            self.optimizer_d.step()
+            self.optimizer_v.step()
+            self.scheduler_d.step()
+            self.scheduler_v.step()
+            self.global_step += 1
+            tqdm.tqdm.write(f"iter: {self.global_step}, lr_d: {self.scheduler_d.get_last_lr()[0]}, lr_v: {self.scheduler_v.get_last_lr()[0]}, nseloss_fine: {nseloss_fine}, img_loss: {img_loss}, proj_loss: {proj_loss}, min_vel_reg: {min_vel_reg}")
+        return nseloss_fine, img_loss, proj_loss, min_vel_reg
+
     @torch.compile
     def image_loss(self, batch_indices, batch_rays_o, batch_rays_d, depth_size: int, near: float, far: float):
         batch_time, batch_target_pixels = sample_random_frame(videos_data=self.videos_data_resampled, batch_indices=batch_indices, device=self.target_device, dtype=self.target_dtype)
@@ -120,6 +138,79 @@ class TrainModel:
         img_loss = torch.nn.functional.mse_loss(rgb_map, batch_target_pixels)
 
         return img_loss
+
+    def joint_loss(self, batch_indices, batch_rays_o, batch_rays_d, depth_size: int, near: float, far: float):
+        def g(x):
+            return self.model_d(x)
+
+        batch_time, batch_target_pixels = sample_random_frame(videos_data=self.videos_data_resampled, batch_indices=batch_indices, device=self.target_device, dtype=self.target_dtype)
+        batch_size_current = batch_rays_d.shape[0]
+
+        t_vals = torch.linspace(0., 1., steps=depth_size, device=self.target_device, dtype=self.target_dtype)
+        t_vals = t_vals.view(1, depth_size)
+        z_vals = near * (1. - t_vals) + far * t_vals
+        z_vals = z_vals.expand(batch_size_current, depth_size)
+
+        mid_vals = .5 * (z_vals[..., 1:] + z_vals[..., :-1])
+        upper_vals = torch.cat([mid_vals, z_vals[..., -1:]], -1)
+        lower_vals = torch.cat([z_vals[..., :1], mid_vals], -1)
+        t_rand = torch.rand(z_vals.shape, device=self.target_device, dtype=self.target_dtype)
+        z_vals = lower_vals + (upper_vals - lower_vals) * t_rand
+
+        batch_dist_vals = z_vals[..., 1:] - z_vals[..., :-1]  # [batch_size_current, N_depths-1]
+        batch_points = batch_rays_o[:, None, :] + batch_rays_d[:, None, :] * z_vals[..., :, None]  # [batch_size_current, N_depths, 3]
+        batch_points_time = torch.cat([batch_points, batch_time.expand(batch_points[..., :1].shape)], dim=-1)
+        batch_points_time_flat = batch_points_time.reshape(-1, 4)
+
+        bbox_mask = insideMask(batch_points_time_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+        batch_points_time_flat_filtered = batch_points_time_flat[bbox_mask]
+        batch_points_time_flat_filtered.requires_grad = True
+
+        hidden = self.encoder_d(batch_points_time_flat_filtered)
+        raw_d = self.model_d(hidden)
+        raw_flat = torch.zeros([batch_size_current * depth_size], device=self.target_device, dtype=self.target_dtype)
+        raw_d_flat = raw_d.view(-1)
+        raw_flat = raw_flat.masked_scatter(bbox_mask, raw_d_flat)
+        raw = raw_flat.reshape(batch_size_current, depth_size, 1)
+
+        dists_cat = torch.cat([batch_dist_vals, torch.tensor([1e10], device=self.target_device).expand(batch_dist_vals[..., :1].shape)], -1)  # [batch_size_current, N_depths]
+        dists_final = dists_cat * torch.norm(batch_rays_d[..., None, :], dim=-1)  # [batch_size_current, N_depths]
+
+        rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
+        noise = 0.
+        alpha = 1. - torch.exp(-torch.nn.functional.relu(raw[..., -1] + noise) * dists_final)
+        weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1), device=self.target_device), 1. - alpha + 1e-10], -1), -1)[:, :-1]
+        rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
+        img_loss = torch.nn.functional.mse_loss(rgb_map, batch_target_pixels)
+
+        jac = torch.vmap(torch.func.jacrev(g))(hidden)
+        jac_x = get_minibatch_jacobian(hidden, batch_points_time_flat_filtered)
+        jac = jac @ jac_x
+        _d_x, _d_y, _d_z, _d_t = [torch.squeeze(_, -1) for _ in jac.split(1, dim=-1)]
+
+        raw_vel, raw_f = self.model_v(self.encoder_v(batch_points_time_flat_filtered))
+        _u_x, _u_y, _u_z, _u_t = None, None, None, None
+        _u, _v, _w = raw_vel.split(1, dim=-1)
+        split_nse = _d_t + (_u * _d_x + _v * _d_y + _w * _d_z)
+        nse_errors = torch.mean(torch.square(split_nse))
+        split_nse_wei = 0.001
+        nseloss_fine = nse_errors * split_nse_wei
+
+        proj_loss = torch.zeros_like(nseloss_fine)
+
+        viz_dens_mask = raw_d.detach() > 0.1
+        vel_norm = raw_vel.norm(dim=-1, keepdim=True)
+        min_vel_mask = vel_norm.detach() < 0.2 * raw_d.detach()
+        vel_reg_mask = min_vel_mask & viz_dens_mask
+        min_vel_reg_map = (0.2 * raw_d - vel_norm) * vel_reg_mask.float()
+        min_vel_reg = min_vel_reg_map.pow(2).mean()
+        # min_vel_reg = torch.zeros_like(nseloss_fine)
+
+        skip = False
+        if nse_errors.sum() > 10000:
+            print(f'skip large loss {nse_errors.sum():.3g}, timestep={batch_points_time_flat_filtered[0, 3]}')
+            skip = True
+        return skip, nseloss_fine, img_loss, proj_loss, min_vel_reg
 
     def save_ckpt(self, directory: str):
         from datetime import datetime
@@ -237,7 +328,7 @@ def train_density_only(total_iter, batch_size, depth_size, ratio, target_device,
     try:
         for _ in tqdm.trange(total_iter):
             img_loss = model.optimize_density(depth_size)
-            losses.append(img_loss.item())  # 获取 tensor 的数值
+            losses.append(img_loss.item())
             steps.append(model.global_step)
 
             if len(losses) % 100 == 0:
@@ -267,11 +358,89 @@ def train_density_only(total_iter, batch_size, depth_size, ratio, target_device,
         plt.grid(True)
         plt.show()
 
-        # 保存图片
         plt.savefig(save_path)
         plt.close()
 
         print(f"Image loss curve saved to {save_path}")
+
+
+def train_joint(total_iter, batch_size, depth_size, ratio, target_device, target_dtype, pretrained_ckpt=None):
+    losses_nseloss_fine = []
+    losses_img = []
+    losses_proj = []
+    losses_min_vel_reg = []
+    steps = []
+    avg_losses_nseloss_fine = []
+    avg_losses_img = []
+    avg_losses_proj = []
+    avg_losses_min_vel_reg = []
+    avg_steps = []
+
+    model = TrainModel(batch_size, ratio, target_device, target_dtype)
+    if pretrained_ckpt:
+        model.load_ckpt(pretrained_ckpt)
+    try:
+        for _ in tqdm.trange(total_iter):
+            nseloss_fine, img_loss, proj_loss, min_vel_reg = model.optimize_joint(depth_size)
+            losses_nseloss_fine.append(nseloss_fine.item())
+            losses_img.append(img_loss.item())
+            losses_proj.append(proj_loss.item())
+            losses_min_vel_reg.append(min_vel_reg.item())
+            steps.append(model.global_step)
+
+            if len(losses_img) % 100 == 0:
+                avg_loss_nseloss_fine = sum(losses_nseloss_fine[-100:]) / 100
+                avg_loss_img = sum(losses_img[-100:]) / 100
+                avg_loss_proj = sum(losses_proj[-100:]) / 100
+                avg_loss_min_vel_reg = sum(losses_min_vel_reg[-100:]) / 100
+                avg_losses_nseloss_fine.append(avg_loss_nseloss_fine)
+                avg_losses_img.append(avg_loss_img)
+                avg_losses_proj.append(avg_loss_proj)
+                avg_losses_min_vel_reg.append(avg_loss_min_vel_reg)
+                avg_steps.append(model.global_step)
+
+    except Exception as e:
+        print(e)
+    finally:
+        model.save_ckpt('ckpt/train_density_only')
+        from datetime import datetime
+        import os
+        import matplotlib.pyplot as plt
+
+        # 获取时间戳和保存目录
+        timestamp = datetime.now().strftime("%m%d%H")
+        save_dir = 'ckpt/image'
+        os.makedirs(save_dir, exist_ok=True)
+
+        # 定义四个损失及其属性
+        loss_data = [
+            ("nseloss_fine", avg_steps, avg_losses_nseloss_fine, 'red', 'Average NSE Loss Fine (every 100 steps)'),
+            ("img_loss", avg_steps, avg_losses_img, 'blue', 'Average Image Loss (every 100 steps)'),
+            ("proj_loss", avg_steps, avg_losses_proj, 'green', 'Average Proj Loss (every 100 steps)'),
+            ("min_vel_reg", avg_steps, avg_losses_min_vel_reg, 'purple', 'Average Min Vel Reg Loss (every 100 steps)')
+        ]
+
+        # 绘制并保存四个独立的损失曲线
+        for loss_name, steps, losses, color, title in loss_data:
+            # 构建文件名
+            filename = f"loss_{loss_name}_{timestamp}_bs{batch_size}_{model.global_step}.png"
+            save_path = os.path.join(save_dir, filename)
+
+            # 绘制曲线
+            plt.figure(figsize=(8, 6))
+            plt.plot(steps, losses, label=title, color=color, linestyle='-', marker='o')
+            plt.xlabel('Global Step')
+            plt.ylabel('Loss (Averaged)')
+            plt.title(f'{title} vs. Global Step')
+            plt.legend()
+            plt.grid(True)
+            plt.show()
+
+            # 保存图片
+            plt.savefig(save_path)
+            plt.close()
+
+            print(f"{loss_name} loss curve saved to {save_path}")
 
 
 def validate_sample_grid(resx, resy, resz, target_device, target_dtype, ckpt_path):
@@ -280,26 +449,29 @@ def validate_sample_grid(resx, resy, resz, target_device, target_dtype, ckpt_pat
     for frame in tqdm.trange(120):
         raw_d = model.sample_density_grid(resx, resy, resz, frame)
         raw_v = model.sample_velocity_grid(resx, resy, resz, frame)
-        np.savez_compressed(f'ckpt/sampled_grid/sampled_grid_{frame+1:03d}.npz', den=raw_d.cpu().numpy(), vel=raw_v.cpu().numpy())
+        np.savez_compressed(f'ckpt/sampled_grid/sampled_grid_{frame + 1:03d}.npz', den=raw_d.cpu().numpy(), vel=raw_v.cpu().numpy())
 
 
 if __name__ == "__main__":
-    # # option - train_density_only
-    # train_density_only(
-    #     total_iter=1000,
-    #     batch_size=1024,
-    #     depth_size=192,
-    #     ratio=0.5,
-    #     target_device=torch.device("cuda:0"),
-    #     target_dtype=torch.float32,
-    # )
+    option = "validate_sample_grid"
 
-    # option - validate_sample_grid
-    validate_sample_grid(
-        resx=128,
-        resy=192,
-        resz=128,
-        target_device=torch.device("cuda:0"),
-        target_dtype=torch.float32,
-        ckpt_path='ckpt/train_density_only/ckpt_033120_bs1024_100000.tar',
-    )
+    if option == "train_density_only":
+        train_density_only(
+            total_iter=1000,
+            batch_size=1024,
+            depth_size=192,
+            ratio=0.5,
+            target_device=torch.device("cuda:0"),
+            target_dtype=torch.float32,
+            pretrained_ckpt=None
+        )
+
+    if option == "validate_sample_grid":
+        validate_sample_grid(
+            resx=128,
+            resy=192,
+            resz=128,
+            target_device=torch.device("cuda:0"),
+            target_dtype=torch.float32,
+            ckpt_path='ckpt/train_density_only/ckpt_033120_bs1024_100000.tar',
+        )
