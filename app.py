@@ -466,6 +466,17 @@ if __name__ == "__main__":
             pretrained_ckpt=None
         )
 
+    if option == "train_joint":
+        train_joint(
+            total_iter=1000,
+            batch_size=1024,
+            depth_size=192,
+            ratio=0.5,
+            target_device=torch.device("cuda:0"),
+            target_dtype=torch.float32,
+            pretrained_ckpt=None
+        )
+
     if option == "validate_sample_grid":
         validate_sample_grid(
             resx=128,
