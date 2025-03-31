@@ -627,7 +627,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
     parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity_only', 'train_joint', 'validate_sample_grid'], required=True, help="Choose the operation to execute.")
-    parser.add_argument('--ckpt_path', type=str, required=True, help="Path to the checkpoint.")
+    parser.add_argument('--ckpt_path', type=str, default="", help="Path to the checkpoint.")
     parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
     args = parser.parse_args()
 
