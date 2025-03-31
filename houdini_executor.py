@@ -1,3 +1,5 @@
+import numpy as np
+
 from lib.dataset import *
 from lib.frustum import *
 from model.encoder_hyfluid import *
@@ -5,6 +7,64 @@ from model.model_hyfluid import *
 
 import math
 import tqdm
+import os
+
+def advect_SL(q_grid, vel_world_prev, coord_3d_sim, dt, RK=1):
+    """Advect a scalar quantity using a given velocity field.
+    Args:
+        q_grid: [X', Y', Z', C]
+        vel_world_prev: [X, Y, Z, 3]
+        coord_3d_sim: [X, Y, Z, 3]
+        dt: float
+        RK: int, number of Runge-Kutta steps
+        y_start: where to start at y-axis
+        proj_y: simulation domain resolution at y-axis
+        use_project: whether to use Poisson solver
+        project_solver: Poisson solver
+        bbox_model: bounding box model
+    Returns:
+        advected_quantity: [X, Y, Z, 1]
+        vel_world: [X, Y, Z, 3]
+    """
+    if RK == 1:
+        vel_world = vel_world_prev.clone()
+        vel_sim = vel_world  # [X, Y, Z, 3]
+    elif RK == 2:
+        vel_world = vel_world_prev.clone()  # [X, Y, Z, 3]
+        # breakpoint()
+        vel_sim = vel_world  # [X, Y, Z, 3]
+        coord_3d_sim_midpoint = coord_3d_sim - 0.5 * dt * vel_sim  # midpoint
+        midpoint_sampled = coord_3d_sim_midpoint * 2 - 1  # [X, Y, Z, 3]
+        vel_sim = torch.nn.functional.grid_sample(vel_sim.permute(3, 2, 1, 0)[None], midpoint_sampled.permute(2, 1, 0, 3)[None], align_corners=True, padding_mode='zeros').squeeze(0).permute(3, 2, 1, 0)  # [X, Y, Z, 3]
+    else:
+        raise NotImplementedError
+    backtrace_coord = coord_3d_sim - dt * vel_sim  # [X, Y, Z, 3]
+    backtrace_coord_sampled = backtrace_coord * 2 - 1  # ranging [-1, 1]
+    q_grid = q_grid[None, ...].permute([0, 4, 3, 2, 1])  # [N, C, Z, Y, X] i.e., [N, C, D, H, W]
+    q_backtraced = torch.nn.functional.grid_sample(q_grid, backtrace_coord_sampled.permute(2, 1, 0, 3)[None, ...], align_corners=True, padding_mode='zeros')  # [N, C, D, H, W]
+    q_backtraced = q_backtraced.squeeze(0).permute([3, 2, 1, 0])  # [X, Y, Z, C]
+    return q_backtraced
+
+
+def advect_maccormack(q_grid, vel_sim_prev, coord_3d_sim, dt):
+    """
+    Args:
+        q_grid: [X', Y', Z', C]
+        vel_world_prev: [X, Y, Z, 3]
+        coord_3d_sim: [X, Y, Z, 3]
+        dt: float
+    Returns:
+        advected_quantity: [X, Y, Z, C]
+        vel_world: [X, Y, Z, 3]
+    """
+    q_grid_next = advect_SL(q_grid, vel_sim_prev, coord_3d_sim, dt)
+    q_grid_back = advect_SL(q_grid_next, vel_sim_prev, coord_3d_sim, -dt)
+    q_advected = q_grid_next + (q_grid - q_grid_back) / 2
+    C = q_advected.shape[-1]
+    for i in range(C):
+        q_max, q_min = q_grid[..., i].max(), q_grid[..., i].min()
+        q_advected[..., i] = q_advected[..., i].clamp_(q_min, q_max)
+    return q_advected
 
 
 def binary_dilation_3d(input_grid: torch.Tensor, extrapolate: int) -> torch.Tensor:
@@ -353,7 +413,16 @@ class HoudiniExecutor:
             raw_d_flat = torch.cat(raw_d_flat_list, dim=0)
             raw_d_flat[~bbox_mask] = 0.0
             raw_d = raw_d_flat.reshape(resx, resy, resz, 1)
-            return raw_d.to(torch.device('cpu'))
+            return raw_d
+
+    def get_mark_to_sim(self, resx, resy, resz, source_height):
+        with torch.no_grad():
+            xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
+            coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
+            coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
+            bbox_mask = self.get_mask(coord_3d_world)
+            mask_to_sim = coord_3d_sim[..., 1] > source_height
+            return mask_to_sim, coord_3d_sim, bbox_mask
 
     @torch.compile
     def sample_velocity_grid(self, resx, resy, resz, frame, use_oge=False):
@@ -376,7 +445,7 @@ class HoudiniExecutor:
             raw_vel_flat = torch.cat(raw_vel_flat_list, dim=0)
             raw_vel_flat[~bbox_mask] = 0.0
             raw_vel = raw_vel_flat.reshape(resx, resy, resz, 3)
-            return raw_vel.to(torch.device('cpu'))
+            return raw_vel
 
     @torch.compile
     def sample_points(self, resx, resy, resz):
@@ -403,6 +472,32 @@ def run_sample_grids(ckpt_path):
     raw_d = executor.sample_density_grid(64, 64, 64, 0)
     raw_vel = executor.sample_velocity_grid(64, 64, 64, 0)
     print(raw_d.shape, raw_vel.shape)
+
+
+def run_resimulation(ckpt_path):
+    torch.set_float32_matmul_precision('high')
+    executor = HoudiniExecutor(batch_size=1024, depth_size=192, ratio=0.5, target_device=torch.device("cuda:0"), target_dtype=torch.float32)
+    executor.load_ckpt(ckpt_path)
+
+    dt = 1. / 119.
+    source_height = 0.15
+    resx, resy, resz = 128, 192, 128
+
+    den = executor.sample_density_grid(resx, resy, resz, 0)
+    mask_to_sim, coord_3d_sim, bbox_mask = executor.get_mark_to_sim(resx, resy, resz, source_height)
+    for step in tqdm.trange(120):
+        source = executor.sample_density_grid(resx, resy, resz, step)
+
+        if step > 0:
+            vel = executor.sample_velocity_grid(resx, resy, resz, step-1)
+            vel_sim_confined = world2sim_rot(vel, executor.s_w2s, executor.s_scale)
+            den = advect_maccormack(den, vel_sim_confined, coord_3d_sim, dt)
+            den[~mask_to_sim] = source[~mask_to_sim]
+            den[~bbox_mask] *= 0.
+
+        os.makedirs('output_native', exist_ok=True)
+        np.save(os.path.join('output_native', f'density_advected_{step:03d}.npy'), den.cpu().numpy())
+        np.save(os.path.join('output_native', f'density_original_{step:03d}.npy'), source.cpu().numpy())
 
 
 def run_train_density_only():
@@ -441,7 +536,8 @@ def compute_filtered_occupancy_grids():
 
 
 if __name__ == '__main__':
-    run_train_density_only()
+    # run_train_density_only()
     # run_train_joint()
     # run_sample_grids('houdini/ckpt/den_002533.tar')
     # compute_filtered_occupancy_grids()
+    run_resimulation('houdini/ckpt_joint/ckpt_032516_bs1024_119865.tar')

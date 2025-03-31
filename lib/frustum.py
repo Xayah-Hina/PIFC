@@ -171,3 +171,9 @@ def world2sim(pts_world, s_w2s, s_scale):
     pts_sim_ = torch.matmul(s_w2s, pts_world_homo[..., None]).squeeze(-1)[..., :3]
     pts_sim = pts_sim_ / s_scale  # 3.target to 2.simulation
     return pts_sim
+
+
+def world2sim_rot(pts_world, s_w2s, s_scale):
+    pts_sim_ = torch.matmul(s_w2s[:3, :3], pts_world[..., None]).squeeze(-1)
+    pts_sim = pts_sim_ / (s_scale)  # 3.target to 2.simulation
+    return pts_sim
