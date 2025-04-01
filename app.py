@@ -305,9 +305,9 @@ class TrainModel:
             'optimizer_v': self.optimizer_v.state_dict(),
         }, path)
 
-    def load_ckpt(self, path: str):
+    def load_ckpt(self, path: str, device: torch.device):
         try:
-            checkpoint = torch.load(path)
+            checkpoint = torch.load(path, map_location=device)
             self.global_step = checkpoint['global_step']
             self.model_d.load_state_dict(checkpoint['model_d'])
             self.encoder_d.load_state_dict(checkpoint['encoder_d'])
@@ -328,8 +328,10 @@ class ValidationModel:
         self.target_device = target_device
         self.target_dtype = target_dtype
 
+        self.coord_3d_sim = None
         self.coord_3d_world = None
         self.bbox_mask = None
+        self.bbox_mask_flat = None
         self.resx, self.resy, self.resz = None, None, None
         self.current_ckpt = ""
 
@@ -363,9 +365,9 @@ class ValidationModel:
         self.bbox_mask_flat = self.bbox_mask.flatten()
         self.resx, self.resy, self.resz = resx, resy, resz
 
-    def load_ckpt(self, path: str):
+    def load_ckpt(self, path: str, device: torch.device):
         try:
-            checkpoint = torch.load(path)
+            checkpoint = torch.load(path, map_location=device)
             self.model_d.load_state_dict(checkpoint['model_d'])
             self.encoder_d.load_state_dict(checkpoint['encoder_d'])
             self.model_v.load_state_dict(checkpoint['model_v'])
@@ -437,7 +439,7 @@ def train_density_only(total_iter, batch_size, depth_size, ratio, target_device,
 
     model = TrainModel(batch_size, ratio, target_device, target_dtype)
     if pretrained_ckpt:
-        model.load_ckpt(pretrained_ckpt)
+        model.load_ckpt(pretrained_ckpt, target_device)
     try:
         for _ in tqdm.trange(total_iter):
             img_loss = model.optimize_density(depth_size)
@@ -490,7 +492,7 @@ def train_velocity_only(total_iter, batch_size, ratio, target_device, target_dty
 
     model = TrainModel(batch_size, ratio, target_device, target_dtype)
     if pretrained_ckpt:
-        model.load_ckpt(pretrained_ckpt)
+        model.load_ckpt(pretrained_ckpt, target_device)
     try:
         points_generator = sample_bbox(128, 192, 128, 1024, True, target_device, target_dtype, model.s2w, model.s_w2s, model.s_scale, model.s_min, model.s_max)
         for _ in tqdm.trange(total_iter):
@@ -574,7 +576,7 @@ def train_joint(total_iter, batch_size, depth_size, ratio, target_device, target
 
     model = TrainModel(batch_size, ratio, target_device, target_dtype)
     if pretrained_ckpt:
-        model.load_ckpt(pretrained_ckpt)
+        model.load_ckpt(pretrained_ckpt, target_device)
     try:
         for _ in tqdm.trange(total_iter):
             nseloss_fine, img_loss, proj_loss, min_vel_reg = model.optimize_joint(depth_size)
@@ -641,7 +643,7 @@ def train_joint(total_iter, batch_size, depth_size, ratio, target_device, target
 def validate_sample_grid(resx, resy, resz, target_device, target_dtype, ckpt_path):
     model = ValidationModel(target_device, target_dtype)
     model.load_sample_coords(resx, resy, resz)
-    model.load_ckpt(ckpt_path)
+    model.load_ckpt(ckpt_path, target_device)
     os.makedirs('ckpt/sampled_grid', exist_ok=True)
     for frame in tqdm.trange(120):
         raw_d = model.sample_density_grid(frame)
@@ -703,5 +705,5 @@ if __name__ == "__main__":
     if args.option == "resimulation":
         model = ValidationModel(torch.device(args.device), torch.float32)
         model.load_sample_coords(128, 192, 128)
-        model.load_ckpt(args.ckpt_path)
+        model.load_ckpt(args.ckpt_path, torch.device(args.device))
         model.resimulation(1.0 / 119.0)
