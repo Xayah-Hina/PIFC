@@ -410,12 +410,13 @@ class ValidationModel:
             mask_to_sim = coord_3d_sim[..., 1] > source_height
 
             den = self.sample_density_grid(resx, resy, resz, 0)
+            source = den
             for step in tqdm.trange(120):
                 if step > 0:
                     vel = self.sample_velocity_grid(resx, resy, resz, step - 1)
                     vel_sim_confined = world2sim_rot(vel, self.s_w2s, self.s_scale)
                     den = advect_maccormack(den, vel_sim_confined, coord_3d_sim, dt)
-                    source = den.sample_density_grid(resx, resy, resz, step)
+                    source = self.sample_density_grid(resx, resy, resz, step)
                     den[~mask_to_sim] = source[~mask_to_sim]
                     den[~bbox_mask] *= 0.
                 os.makedirs('ckpt/resimulation', exist_ok=True)
@@ -646,7 +647,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
-    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity_only', 'train_joint', 'validate_sample_grid'], required=True, help="Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity_only', 'train_joint', 'validate_sample_grid', 'resimulation'], required=True, help="Choose the operation to execute.")
     parser.add_argument('--ckpt_path', type=str, default="", help="Path to the checkpoint.")
     parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
     args = parser.parse_args()
@@ -692,3 +693,8 @@ if __name__ == "__main__":
             target_dtype=torch.float32,
             ckpt_path=args.ckpt_path,
         )
+
+    if args.option == "resimulation":
+        model = ValidationModel(torch.device(args.device), torch.float32)
+        model.load_ckpt(args.ckpt_path)
+        model.resimulation(128, 192, 128, 1.0 / 119.0)
