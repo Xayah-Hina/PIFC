@@ -1,5 +1,6 @@
 from lib.dataset import *
 from lib.frustum import *
+from lib.solver import *
 from model.encoder_hyfluid import *
 from model.model_hyfluid import *
 
@@ -398,9 +399,28 @@ class ValidationModel:
             raw_vel = raw_vel_flat.reshape(resx, resy, resz, 3)
             return raw_vel
 
+    @torch.compile
     def resimulation(self, resx, resy, resz, dt):
         with torch.no_grad():
             source_height = 0.15
+            xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
+            coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
+            coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
+            bbox_mask = insideMask(coord_3d_world, self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+            mask_to_sim = coord_3d_sim[..., 1] > source_height
+
+            den = self.sample_density_grid(resx, resy, resz, 0)
+            for step in tqdm.trange(120):
+                if step > 0:
+                    vel = self.sample_velocity_grid(resx, resy, resz, step - 1)
+                    vel_sim_confined = world2sim_rot(vel, self.s_w2s, self.s_scale)
+                    den = advect_maccormack(den, vel_sim_confined, coord_3d_sim, dt)
+                    source = den.sample_density_grid(resx, resy, resz, step)
+                    den[~mask_to_sim] = source[~mask_to_sim]
+                    den[~bbox_mask] *= 0.
+                os.makedirs('ckpt/resimulation', exist_ok=True)
+                np.save(os.path.join('ckpt/resimulation', f'density_advected_{step + 1:03d}.npy'), den.cpu().numpy())
+                np.save(os.path.join('ckpt/resimulation', f'density_original_{step + 1:03d}.npy'), source.cpu().numpy())
 
 
 def train_density_only(total_iter, batch_size, depth_size, ratio, target_device, target_dtype, pretrained_ckpt=None):
