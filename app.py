@@ -335,6 +335,15 @@ class ValidationModel:
         self.resx, self.resy, self.resz = None, None, None
         self.current_ckpt = ""
 
+        self.bbox_low_sim = None
+        self.bbox_high_sim = None
+        self.bbox_low_masked_sim = None
+        self.bbox_high_masked_sim = None
+        self.bbox_low_world = None
+        self.bbox_high_world = None
+        self.bbox_low_masked_world = None
+        self.bbox_high_masked_world = None
+
     def _load_model(self, target_device: torch.device):
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
         self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
@@ -364,6 +373,15 @@ class ValidationModel:
         self.bbox_mask = insideMask(self.coord_3d_world, self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
         self.bbox_mask_flat = self.bbox_mask.flatten()
         self.resx, self.resy, self.resz = resx, resy, resz
+
+        self.bbox_low_sim, _ = torch.min(self.coord_3d_sim.reshape(-1, 3), dim=-2)
+        self.bbox_high_sim, _ = torch.max(self.coord_3d_sim.reshape(-1, 3), dim=-2)
+        self.bbox_low_masked_sim, _ = torch.min(self.coord_3d_sim[self.bbox_mask].reshape(-1, 3), dim=-2)
+        self.bbox_high_masked_sim, _ = torch.max(self.coord_3d_sim[self.bbox_mask].reshape(-1, 3), dim=-2)
+        self.bbox_low_world = sim2world(self.bbox_low_sim, self.s2w, self.s_scale)
+        self.bbox_high_world = sim2world(self.bbox_high_sim, self.s2w, self.s_scale)
+        self.bbox_low_masked_world = sim2world(self.bbox_low_masked_sim, self.s2w, self.s_scale)
+        self.bbox_high_masked_world = sim2world(self.bbox_high_masked_sim, self.s2w, self.s_scale)
 
     def load_ckpt(self, path: str, device: torch.device):
         try:
@@ -707,4 +725,4 @@ if __name__ == "__main__":
         model = ValidationModel(torch.device(args.device), torch.float32)
         model.load_sample_coords(128, 192, 128)
         model.load_ckpt(args.ckpt_path, torch.device(args.device))
-        model.resimulation(dt = 1.0 / 119.0)
+        model.resimulation(dt=1.0 / 119.0)
