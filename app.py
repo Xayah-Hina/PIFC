@@ -324,9 +324,14 @@ class TrainModel:
 class ValidationModel:
     def __init__(self, target_device: torch.device, target_dtype: torch.dtype):
         self._load_model(target_device)
-        self._load_valid_domain(target_device, target_dtype)
+        self._load_sample_domain(target_device, target_dtype)
         self.target_device = target_device
         self.target_dtype = target_dtype
+
+        self.coord_3d_world = None
+        self.bbox_mask = None
+        self.resx, self.resy, self.resz = None, None, None
+        self.current_ckpt = ""
 
     def _load_model(self, target_device: torch.device):
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
@@ -334,7 +339,7 @@ class ValidationModel:
         self.encoder_v = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
         self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
 
-    def _load_valid_domain(self, target_device: torch.device, target_dtype: torch.dtype):
+    def _load_sample_domain(self, target_device: torch.device, target_dtype: torch.dtype):
         VOXEL_TRAN = torch.tensor([
             [1.0, 0.0, 7.5497901e-08, 8.1816666e-02],
             [0.0, 1.0, 0.0, -4.4627272e-02],
@@ -348,6 +353,16 @@ class ValidationModel:
         self.s_min = torch.tensor([0.15, 0.0, 0.15], device=target_device, dtype=target_dtype)
         self.s_max = torch.tensor([0.85, 1.0, 0.85], device=target_device, dtype=target_dtype)
 
+    def load_sample_coords(self, resx, resy, resz):
+        if resx == self.resx and resy == self.resy and resz == self.resz:
+            return
+        xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device, dtype=self.target_dtype), torch.linspace(0, 1, resy, device=self.target_device, dtype=self.target_dtype), torch.linspace(0, 1, resz, device=self.target_device, dtype=self.target_dtype)], indexing='ij')
+        self.coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
+        self.coord_3d_world = sim2world(self.coord_3d_sim, self.s2w, self.s_scale)
+        self.bbox_mask = insideMask(self.coord_3d_world, self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+        self.bbox_mask_flat = self.bbox_mask.flatten()
+        self.resx, self.resy, self.resz = resx, resy, resz
+
     def load_ckpt(self, path: str):
         try:
             checkpoint = torch.load(path)
@@ -356,18 +371,14 @@ class ValidationModel:
             self.model_v.load_state_dict(checkpoint['model_v'])
             self.encoder_v.load_state_dict(checkpoint['encoder_v'])
             tqdm.tqdm.write(f"loaded checkpoint from {path}")
+            self.current_ckpt = path
         except Exception as e:
             print(f"Error loading model: {e}")
 
     @torch.compile
-    def sample_density_grid(self, resx, resy, resz, frame):
+    def sample_density_grid(self, frame):
         with torch.no_grad():
-            xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device, dtype=self.target_dtype), torch.linspace(0, 1, resy, device=self.target_device, dtype=self.target_dtype), torch.linspace(0, 1, resz, device=self.target_device, dtype=self.target_dtype)], indexing='ij')
-            coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
-            coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
-            input_xyzt_flat = torch.cat([coord_3d_world, torch.ones_like(coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
-            bbox_mask = insideMask(input_xyzt_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
-
+            input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
             raw_d_flat_list = []
             batch_size = 64 * 64 * 64
             for i in range(0, input_xyzt_flat.shape[0], batch_size):
@@ -375,19 +386,14 @@ class ValidationModel:
                 raw_d_flat_batch = self.model_d(self.encoder_d(input_xyzt_flat_batch))
                 raw_d_flat_list.append(raw_d_flat_batch)
             raw_d_flat = torch.cat(raw_d_flat_list, dim=0)
-            raw_d_flat[~bbox_mask] = 0.0
-            raw_d = raw_d_flat.reshape(resx, resy, resz, 1)
+            raw_d_flat[~self.bbox_mask_flat] = 0.0
+            raw_d = raw_d_flat.reshape(self.resx, self.resy, self.resz, 1)
             return raw_d
 
     @torch.compile
-    def sample_velocity_grid(self, resx, resy, resz, frame):
+    def sample_velocity_grid(self, frame):
         with torch.no_grad():
-            xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device, dtype=self.target_dtype), torch.linspace(0, 1, resy, device=self.target_device, dtype=self.target_dtype), torch.linspace(0, 1, resz, device=self.target_device, dtype=self.target_dtype)], indexing='ij')
-            coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
-            coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
-            input_xyzt_flat = torch.cat([coord_3d_world, torch.ones_like(coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
-            bbox_mask = insideMask(input_xyzt_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
-
+            input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
             raw_vel_flat_list = []
             batch_size = 64 * 64 * 64
             for i in range(0, input_xyzt_flat.shape[0], batch_size):
@@ -395,30 +401,29 @@ class ValidationModel:
                 raw_vel_flat_batch, _ = self.model_v(self.encoder_v(input_xyzt_flat_batch))
                 raw_vel_flat_list.append(raw_vel_flat_batch)
             raw_vel_flat = torch.cat(raw_vel_flat_list, dim=0)
-            raw_vel_flat[~bbox_mask] = 0.0
-            raw_vel = raw_vel_flat.reshape(resx, resy, resz, 3)
+            raw_vel_flat[~self.bbox_mask_flat] = 0.0
+            raw_vel = raw_vel_flat.reshape(self.resx, self.resy, self.resz, 3)
             return raw_vel
 
     @torch.compile
-    def resimulation(self, resx, resy, resz, dt):
+    def advect_density(self, den, vel, source, dt, mask_to_sim):
+        with torch.no_grad():
+            den = advect_maccormack(den, vel, self.coord_3d_sim, dt)
+            den[~mask_to_sim] = source[~mask_to_sim]
+            den[~self.bbox_mask] *= 0.
+            return den
+
+    @torch.compile
+    def resimulation(self, dt):
         with torch.no_grad():
             source_height = 0.15
-            xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device), torch.linspace(0, 1, resy, device=self.target_device), torch.linspace(0, 1, resz, device=self.target_device)], indexing='ij')
-            coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
-            coord_3d_world = sim2world(coord_3d_sim, self.s2w, self.s_scale)
-            bbox_mask = insideMask(coord_3d_world, self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
-            mask_to_sim = coord_3d_sim[..., 1] > source_height
-
-            den = self.sample_density_grid(resx, resy, resz, 0)
-            source = den
+            source = self.sample_density_grid(self.resx, self.resy, self.resz, 0)
+            den = source
             for step in tqdm.trange(120):
                 if step > 0:
-                    vel = self.sample_velocity_grid(resx, resy, resz, step - 1)
+                    vel = self.sample_velocity_grid(step - 1)
                     vel_sim_confined = world2sim_rot(vel, self.s_w2s, self.s_scale)
-                    den = advect_maccormack(den, vel_sim_confined, coord_3d_sim, dt)
-                    source = self.sample_density_grid(resx, resy, resz, step)
-                    den[~mask_to_sim] = source[~mask_to_sim]
-                    den[~bbox_mask] *= 0.
+                    den = self.advect_density(den, vel_sim_confined, source, dt, self.coord_3d_sim[..., 1] > source_height)
                 os.makedirs('ckpt/resimulation', exist_ok=True)
                 np.save(os.path.join('ckpt/resimulation', f'density_advected_{step + 1:03d}.npy'), den.cpu().numpy())
                 np.save(os.path.join('ckpt/resimulation', f'density_original_{step + 1:03d}.npy'), source.cpu().numpy())
@@ -635,11 +640,12 @@ def train_joint(total_iter, batch_size, depth_size, ratio, target_device, target
 
 def validate_sample_grid(resx, resy, resz, target_device, target_dtype, ckpt_path):
     model = ValidationModel(target_device, target_dtype)
+    model.load_sample_coords(resx, resy, resz)
     model.load_ckpt(ckpt_path)
     os.makedirs('ckpt/sampled_grid', exist_ok=True)
     for frame in tqdm.trange(120):
-        raw_d = model.sample_density_grid(resx, resy, resz, frame)
-        raw_v = model.sample_velocity_grid(resx, resy, resz, frame)
+        raw_d = model.sample_density_grid(frame)
+        raw_v = model.sample_velocity_grid(frame)
         np.savez_compressed(f'ckpt/sampled_grid/sampled_grid_{frame + 1:03d}.npz', den=raw_d.cpu().numpy(), vel=raw_v.cpu().numpy())
 
 
@@ -696,5 +702,6 @@ if __name__ == "__main__":
 
     if args.option == "resimulation":
         model = ValidationModel(torch.device(args.device), torch.float32)
+        model.load_sample_coords(128, 192, 128)
         model.load_ckpt(args.ckpt_path)
-        model.resimulation(128, 192, 128, 1.0 / 119.0)
+        model.resimulation(1.0 / 119.0)
