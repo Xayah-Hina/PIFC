@@ -419,12 +419,13 @@ class ValidationModel:
     def resimulation(self, dt):
         with torch.no_grad():
             source_height = 0.15
-            source = self.sample_density_grid(self.resx, self.resy, self.resz, 0)
-            den = source
+            den = self.sample_density_grid(0)
+            source = den
             for step in tqdm.trange(120):
                 if step > 0:
                     vel = self.sample_velocity_grid(step - 1)
                     vel_sim_confined = world2sim_rot(vel, self.s_w2s, self.s_scale)
+                    source = self.sample_density_grid(step)
                     den = self.advect_density(den, vel_sim_confined, source, dt, self.coord_3d_sim[..., 1] > source_height)
                 os.makedirs('ckpt/resimulation', exist_ok=True)
                 np.save(os.path.join('ckpt/resimulation', f'density_advected_{step + 1:03d}.npy'), den.cpu().numpy())
@@ -706,4 +707,4 @@ if __name__ == "__main__":
         model = ValidationModel(torch.device(args.device), torch.float32)
         model.load_sample_coords(128, 192, 128)
         model.load_ckpt(args.ckpt_path, torch.device(args.device))
-        model.resimulation(1.0 / 119.0)
+        model.resimulation(dt = 1.0 / 119.0)
