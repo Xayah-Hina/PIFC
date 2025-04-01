@@ -3,26 +3,6 @@ import torchvision.io as io
 import os
 from pathlib import Path
 
-# HyFluid Scene
-training_videos_hyfluid = [
-    "data/hyfluid/train00.mp4",
-    "data/hyfluid/train01.mp4",
-    "data/hyfluid/train02.mp4",
-    "data/hyfluid/train03.mp4",
-    "data/hyfluid/train04.mp4",
-]
-
-camera_calibrations_hyfluid = [
-    "data/hyfluid/cam_train00.npz",
-    "data/hyfluid/cam_train01.npz",
-    "data/hyfluid/cam_train02.npz",
-    "data/hyfluid/cam_train03.npz",
-    "data/hyfluid/cam_train04.npz",
-]
-
-training_videos = training_videos_hyfluid
-camera_calibrations = camera_calibrations_hyfluid
-
 
 def find_relative_paths(relative_path_list):
     current_dir = Path.cwd()
@@ -40,10 +20,6 @@ def find_relative_paths(relative_path_list):
 
         if not found:
             raise FileNotFoundError(f"file not found: {relative_path}")
-
-
-find_relative_paths(training_videos)
-find_relative_paths(camera_calibrations)
 
 
 def load_videos_data(*video_paths, ratio: float, dtype: torch.dtype):

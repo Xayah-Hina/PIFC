@@ -111,6 +111,35 @@ def sample_random_frame(videos_data: torch.Tensor, batch_indices: torch.Tensor, 
     return batch_time, batch_target_pixels
 
 
+def refresh_generator(batch_size, videos_data, poses, focals, width, height, target_device, target_dtype):
+    dirs, u, v = shuffle_uv(focals=focals, width=width, height=height, randomize=True, device=torch.device("cpu"), dtype=target_dtype)
+    dirs = dirs.to(target_device)
+    videos_data_resampled = resample_frames(frames=videos_data, u=u, v=v).to(target_device)
+    generator = sample_frustum(dirs=dirs, poses=poses, batch_size=batch_size, randomize=True, device=target_device)
+
+    return generator, videos_data_resampled
+
+
+def sample_bbox(resx, resy, resz, batch_size, randomize, target_device, target_dtype, s2w, s_w2s, s_scale, s_min, s_max):
+    xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=target_device, dtype=target_dtype), torch.linspace(0, 1, resy, device=target_device, dtype=target_dtype), torch.linspace(0, 1, resz, device=target_device, dtype=target_dtype)], indexing='ij')
+    coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
+    coord_3d_world = sim2world(coord_3d_sim, s2w, s_scale)
+    bbox_mask = insideMask(coord_3d_world, s_w2s, s_scale, s_min, s_max, to_float=False)
+    coord_3d_world_filtered = coord_3d_world[bbox_mask].reshape(-1, 3)
+
+    num_points = coord_3d_world_filtered.shape[0]
+
+    if randomize:
+        indices = torch.randperm(num_points, device=target_device)
+    else:
+        indices = torch.arange(num_points, device=target_device)
+
+    for i in range(0, num_points, batch_size):
+        batch_indices = indices[i:i + batch_size]
+        batch_points = coord_3d_world_filtered[batch_indices]
+        yield batch_points
+
+
 def get_minibatch_jacobian(y, x):
     """Computes the Jacobian of y wrt x assuming minibatch-mode.
     Args:
