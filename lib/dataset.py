@@ -11,8 +11,6 @@ training_videos_hyfluid = [
     "data/hyfluid/train03.mp4",
     "data/hyfluid/train04.mp4",
 ]
-scene_min_hyfluid = [-0.132113, -0.103114, -0.753138]
-scene_max_hyfluid = [0.773877, 0.99804, 0.186818]
 
 camera_calibrations_hyfluid = [
     "data/hyfluid/cam_train00.npz",
@@ -24,8 +22,6 @@ camera_calibrations_hyfluid = [
 
 training_videos = training_videos_hyfluid
 camera_calibrations = camera_calibrations_hyfluid
-scene_min_current = scene_min_hyfluid
-scene_max_current = scene_max_hyfluid
 
 
 def find_relative_paths(relative_path_list):
