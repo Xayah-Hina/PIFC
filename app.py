@@ -102,8 +102,8 @@ class TrainModel:
         self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
         self.optimizer_v = torch.optim.RAdam([{'params': self.model_v.parameters(), 'weight_decay': 1e-6}, {'params': self.encoder_v.parameters(), 'eps': 1e-15}], lr=0.001, betas=(0.9, 0.99))
 
-        target_lr_ratio = 0.1
-        gamma = math.exp(math.log(target_lr_ratio) / 30000)
+        target_lr_ratio = 0.001
+        gamma = math.exp(math.log(target_lr_ratio) / 100000)
         self.scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_d, gamma=gamma)
         self.scheduler_v = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_v, gamma=gamma)
 
@@ -751,14 +751,14 @@ def validate_render_frame(scene, pose, focal, width, height, depth_size, near, f
     model = ValidationModel(scene, target_device, target_dtype)
     model.load_ckpt(pretrained_ckpt, target_device)
 
-    if type(frame) == int:
+    if isinstance(frame, int):
         rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, frame, ratio)
         rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
         import imageio.v3 as imageio
         os.makedirs('ckpt/render_frame', exist_ok=True)
         imageio.imwrite(os.path.join('ckpt/render_frame', 'rgb_{:03d}.png'.format(frame)), rgb8)
-    elif type(frame) == list:
-        for f in frame:
+    elif isinstance(frame, list):
+        for f in tqdm.tqdm(frame, desc="Rendering frames", unit="frame"):
             rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, f, ratio)
             rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
             import imageio.v3 as imageio
