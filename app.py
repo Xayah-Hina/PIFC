@@ -750,12 +750,22 @@ def validate_sample_grid(scene, resx, resy, resz, target_device, target_dtype, p
 def validate_render_frame(scene, pose, focal, width, height, depth_size, near, far, frame, ratio, target_device, target_dtype, pretrained_ckpt):
     model = ValidationModel(scene, target_device, target_dtype)
     model.load_ckpt(pretrained_ckpt, target_device)
-    rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, frame, ratio)
-    rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
-    import imageio.v3 as imageio
-    os.makedirs('ckpt/render_frame', exist_ok=True)
-    imageio.imwrite(os.path.join('ckpt/render_frame', 'rgb_{:03d}.png'.format(frame)), rgb8)
-    return rgb8
+
+    if type(frame) == int:
+        rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, frame, ratio)
+        rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
+        import imageio.v3 as imageio
+        os.makedirs('ckpt/render_frame', exist_ok=True)
+        imageio.imwrite(os.path.join('ckpt/render_frame', 'rgb_{:03d}.png'.format(frame)), rgb8)
+    elif type(frame) == list:
+        for f in frame:
+            rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, f, ratio)
+            rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
+            import imageio.v3 as imageio
+            os.makedirs('ckpt/render_frame', exist_ok=True)
+            imageio.imwrite(os.path.join('ckpt/render_frame', 'rgb_{:03d}.png'.format(f)), rgb8)
+    else:
+        raise ValueError("frame should be an integer or a list of integers.")
 
 
 def test_hyfluid():
@@ -850,8 +860,8 @@ def test_plume_1():
     parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
     args = parser.parse_args()
 
-    # ckpt_path = "ckpt/train_density_only/ckpt_040221_bs1024_100000.tar"
-    ckpt_path = ""
+    ckpt_path = "ckpt/train_density_only/ckpt_040223_bs1024_010000.tar"
+    # ckpt_path = ""
 
     if args.option == "train_density_only":
         train_density_only(
@@ -867,7 +877,7 @@ def test_plume_1():
 
     if args.option == "validate_render_frame":
         validate_render_frame(
-            scene='hyfluid',
+            scene='plume_1',
             pose=torch.tensor([[-6.5174e-01, 7.3241e-02, 7.5490e-01, 3.5361e+00],
                                [-6.9389e-18, 9.9533e-01, -9.6567e-02, 1.9000e+00],
                                [-7.5844e-01, -6.2937e-02, -6.4869e-01, -2.6511e+00],
@@ -878,7 +888,7 @@ def test_plume_1():
             depth_size=192,
             near=2.5,
             far=5.4,
-            frame=110,
+            frame=list(reversed(range(120))),
             ratio=1.0,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
