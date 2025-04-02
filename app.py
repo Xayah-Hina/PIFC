@@ -404,65 +404,63 @@ class ValidationModel:
         except Exception as e:
             print(f"Error loading model: {e}")
 
-    # @torch.compile
-    def render_frame(self, pose, focal, width, height, depth_size, near, far, frame):
+    @torch.compile
+    def render_frame(self, pose, focal, width: float, height: float, depth_size: int, near: float, far: float, frame: int, ratio: float):
         with torch.no_grad():
             poses = pose.unsqueeze(0)
             focals = focal.unsqueeze(0)
-            ratio = 0.5
             focals = focals * ratio
             width = int(width * ratio)
             height = int(height * ratio)
-            dirs, _, _ = shuffle_uv(focals=focals, width=width, height=height, randomize=True, device=torch.device("cpu"), dtype=self.target_dtype)
-            dirs = dirs.to(self.target_device)
+            frame_time = torch.tensor(frame / 120.0, device=self.target_device, dtype=self.target_dtype)
 
+            dirs, _, _ = shuffle_uv(focals=focals, width=width, height=height, randomize=True, device=self.target_device, dtype=self.target_dtype)
             rays_d = torch.einsum('nij,nhwj->nhwi', poses[:, :3, :3], dirs)  # (1, H, W, 3)
             rays_o = poses[:, None, None, :3, 3].expand(rays_d.shape)  # (1, H, W, 3)
             rays_d = rays_d.reshape(-1, 3)  # (1*H*W, 3)
             rays_o = rays_o.reshape(-1, 3)  # (1*H*W, 3)
             total_ray_size = rays_d.shape[0]
 
-            t_vals = torch.linspace(0., 1., steps=depth_size, device=self.target_device, dtype=self.target_dtype)
-            t_vals = t_vals.view(1, depth_size)
-            z_vals = near * (1. - t_vals) + far * t_vals
-            z_vals = z_vals.expand(total_ray_size, depth_size)
+            batch_ray_size = width
+            final_rgb_map_list = []
+            for start_ray_index in range(0, total_ray_size, batch_ray_size):
+                batch_rays_d = rays_d[start_ray_index:start_ray_index + batch_ray_size]
+                batch_rays_o = rays_o[start_ray_index:start_ray_index + batch_ray_size]
+                batch_size_current = batch_rays_d.shape[0]
 
-            dist_vals = z_vals[..., 1:] - z_vals[..., :-1]
-            points = rays_o[:, None, :] + rays_d[:, None, :] * z_vals[..., :, None]
+                t_vals = torch.linspace(0., 1., steps=depth_size, device=self.target_device, dtype=self.target_dtype)
+                t_vals = t_vals.view(1, depth_size)
+                z_vals = near * (1. - t_vals) + far * t_vals
+                z_vals = z_vals.expand(batch_size_current, depth_size)
 
-            frame_time = torch.tensor(frame / 120.0, device=self.target_device, dtype=self.target_dtype)
-            points_time = torch.cat([points, frame_time.expand(points[..., :1].shape)], dim=-1)
-            points_time_flat = points_time.reshape(-1, 4)
+                batch_dist_vals = z_vals[..., 1:] - z_vals[..., :-1]  # [batch_size_current, N_depths-1]
+                batch_points = batch_rays_o[:, None, :] + batch_rays_d[:, None, :] * z_vals[..., :, None]  # [batch_size_current, N_depths, 3]
+                batch_points_time = torch.cat([batch_points, frame_time.expand(batch_points[..., :1].shape)], dim=-1)
+                batch_points_time_flat = batch_points_time.reshape(-1, 4)
 
-            bbox_mask = insideMask(points_time_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
-            points_time_flat_filtered = points_time_flat[bbox_mask]
+                bbox_mask = insideMask(batch_points_time_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+                batch_points_time_flat_filtered = batch_points_time_flat[bbox_mask]
 
-            total_points_size = points_time_flat.shape[0]
-            total_points_size_filtered = points_time_flat_filtered.shape[0]
+                hidden = self.encoder_d(batch_points_time_flat_filtered)
+                raw_d = self.model_d(hidden)
+                raw_flat = torch.zeros([batch_size_current * depth_size], device=self.target_device, dtype=self.target_dtype)
+                raw_d_flat = raw_d.view(-1)
+                raw_flat = raw_flat.masked_scatter(bbox_mask, raw_d_flat)
+                raw = raw_flat.reshape(batch_size_current, depth_size, 1)
 
-            raw_d = torch.zeros([total_points_size, 1], device=self.target_device, dtype=self.target_dtype)
-            raw_d_masked_list = []
-            batch_points_size_filtered = width * depth_size
-            for i in range(0, total_points_size_filtered, batch_points_size_filtered):
-                points_time_flat_batch = points_time_flat_filtered[i:i + batch_points_size_filtered]
-                hidden_batch = self.encoder_d(points_time_flat_batch)
-                raw_d_batch = self.model_d(hidden_batch)
-                raw_d_masked_list.append(raw_d_batch)
-            raw_d_masked = torch.cat(raw_d_masked_list, dim=0)
-            raw_d = raw_d.masked_scatter(bbox_mask, raw_d_masked)
-            raw = raw_d.reshape(total_ray_size, depth_size, 1)
+                dists_cat = torch.cat([batch_dist_vals, torch.tensor([1e10], device=self.target_device).expand(batch_dist_vals[..., :1].shape)], -1)  # [batch_size_current, N_depths]
+                dists_final = dists_cat * torch.norm(batch_rays_d[..., None, :], dim=-1)  # [batch_size_current, N_depths]
 
-            dists_cat = torch.cat([dist_vals, torch.tensor([1e10], device=self.target_device).expand(dist_vals[..., :1].shape)], -1)
-            dists_final = dists_cat * torch.norm(rays_d[..., None, :], dim=-1)
+                rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
+                noise = 0.
+                alpha = 1. - torch.exp(-torch.nn.functional.relu(raw[..., -1] + noise) * dists_final)
+                weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1), device=self.target_device), 1. - alpha + 1e-10], -1), -1)[:, :-1]
+                rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
 
-            rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
-            noise = 0.
-            alpha = 1. - torch.exp(-torch.nn.functional.relu(raw[..., -1] + noise) * dists_final)
-            weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1), device=self.target_device), 1. - alpha + 1e-10], -1), -1)[:, :-1]
-            rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
+                final_rgb_map_list.append(rgb_map)
 
-            rgb_map_final = rgb_map.reshape(height, width, 3)
-            return rgb_map_final
+            final_rgb_map = torch.cat(final_rgb_map_list, dim=0).reshape(height, width, 3)
+            return final_rgb_map
 
     @torch.compile
     def sample_density_grid(self, frame):
@@ -739,10 +737,10 @@ def validate_sample_grid(resx, resy, resz, target_device, target_dtype, pretrain
         np.savez_compressed(f'ckpt/sampled_grid/sampled_grid_{frame + 1:03d}.npz', den=raw_d.cpu().numpy(), vel=raw_v.cpu().numpy())
 
 
-def validate_render_frame(pose, focal, width, height, depth_size, near, far, frame, target_device, target_dtype, pretrained_ckpt):
+def validate_render_frame(pose, focal, width, height, depth_size, near, far, frame, ratio, target_device, target_dtype, pretrained_ckpt):
     model = ValidationModel(target_device, target_dtype)
     model.load_ckpt(pretrained_ckpt, target_device)
-    rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, frame)
+    rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, frame, ratio)
     rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
     import imageio.v3 as imageio
     os.makedirs('ckpt/render_frame', exist_ok=True)
@@ -808,12 +806,13 @@ if __name__ == "__main__":
                                [0.8736, 0.1560, 0.4610, 0.3250],
                                [0.0000, 0.0000, 0.0000, 1.0000]], device=torch.device(args.device), dtype=torch.float32),
             focal=torch.tensor(2613.7634, device=torch.device(args.device), dtype=torch.float32),
-            width=1024,
+            width=1080,
             height=1920,
             depth_size=192,
             near=1.1,
             far=1.5,
-            frame=110,
+            frame=80,
+            ratio=1.0,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
             pretrained_ckpt=args.ckpt_path,
