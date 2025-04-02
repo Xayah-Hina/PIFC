@@ -550,12 +550,12 @@ def train_density_only(scene, total_iter, batch_size, depth_size, ratio, target_
     except Exception as e:
         print(e)
     finally:
-        model.save_ckpt('ckpt/train_density_only')
+        model.save_ckpt(f'ckpt/{scene}/train_density_only')
 
         from datetime import datetime
         timestamp = datetime.now().strftime("%m%d%H")
         filename = f"loss_train_density_only_{timestamp}_bs{batch_size}_{model.global_step}.png"
-        save_dir = 'ckpt/image'
+        save_dir = f'ckpt/{scene}/image'
         os.makedirs(save_dir, exist_ok=True)
         save_path = os.path.join(save_dir, filename)
 
@@ -617,14 +617,14 @@ def train_velocity_only(scene, total_iter, batch_size, ratio, target_device, tar
     except Exception as e:
         print(e)
     finally:
-        model.save_ckpt('ckpt/train_velocity_only')
+        model.save_ckpt(f'ckpt/{scene}/train_velocity_only')
         from datetime import datetime
         import os
         import matplotlib.pyplot as plt
 
         # 获取时间戳和保存目录
         timestamp = datetime.now().strftime("%m%d%H")
-        save_dir = 'ckpt/image'
+        save_dir = f'ckpt/{scene}/image'
         os.makedirs(save_dir, exist_ok=True)
 
         # 定义四个损失及其属性
@@ -693,14 +693,14 @@ def train_joint(scene, total_iter, batch_size, depth_size, ratio, target_device,
     except Exception as e:
         print(e)
     finally:
-        model.save_ckpt('ckpt/train_joint')
+        model.save_ckpt(f'ckpt/{scene}/train_joint')
         from datetime import datetime
         import os
         import matplotlib.pyplot as plt
 
         # 获取时间戳和保存目录
         timestamp = datetime.now().strftime("%m%d%H")
-        save_dir = 'ckpt/image'
+        save_dir = f'ckpt/{scene}/image'
         os.makedirs(save_dir, exist_ok=True)
 
         # 定义四个损失及其属性
@@ -736,11 +736,11 @@ def validate_sample_grid(scene, resx, resy, resz, target_device, target_dtype, p
     model = ValidationModel(scene, target_device, target_dtype)
     model.load_sample_coords(resx, resy, resz)
     model.load_ckpt(pretrained_ckpt, target_device)
-    os.makedirs('ckpt/sampled_grid', exist_ok=True)
+    os.makedirs(f'ckpt/{scene}/sampled_grid', exist_ok=True)
     for frame in tqdm.trange(120):
         raw_d = model.sample_density_grid(frame)
         raw_v = model.sample_velocity_grid(frame)
-        np.savez_compressed(f'ckpt/sampled_grid/sampled_grid_{frame + 1:03d}.npz', den=raw_d.cpu().numpy(), vel=raw_v.cpu().numpy())
+        np.savez_compressed(f'ckpt/{scene}/sampled_grid/sampled_grid_{frame + 1:03d}.npz', den=raw_d.cpu().numpy(), vel=raw_v.cpu().numpy())
 
 
 def validate_render_frame(scene, pose, focal, width, height, depth_size, near, far, frame, ratio, target_device, target_dtype, pretrained_ckpt):
@@ -751,15 +751,15 @@ def validate_render_frame(scene, pose, focal, width, height, depth_size, near, f
         rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, frame, ratio)
         rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
         import imageio.v3 as imageio
-        os.makedirs('ckpt/render_frame', exist_ok=True)
-        imageio.imwrite(os.path.join('ckpt/render_frame', 'rgb_{:03d}.png'.format(frame)), rgb8)
+        os.makedirs(f'ckpt/{scene}/render_frame', exist_ok=True)
+        imageio.imwrite(os.path.join(f'ckpt/{scene}/render_frame', 'rgb_{:03d}.png'.format(frame)), rgb8)
     elif isinstance(frame, list):
         for f in tqdm.tqdm(frame, desc="Rendering frames", unit="frame"):
             rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, f, ratio)
             rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
             import imageio.v3 as imageio
-            os.makedirs('ckpt/render_frame', exist_ok=True)
-            imageio.imwrite(os.path.join('ckpt/render_frame', 'rgb_{:03d}.png'.format(f)), rgb8)
+            os.makedirs(f'ckpt/{scene}/render_frame', exist_ok=True)
+            imageio.imwrite(os.path.join(f'ckpt/{scene}/render_frame', 'rgb_{:03d}.png'.format(f)), rgb8)
     else:
         raise ValueError("frame should be an integer or a list of integers.")
 
@@ -799,7 +799,8 @@ if __name__ == "__main__":
     width, height = 1080, 1920
     resx, resy, resz = 128, 192, 128
 
-    # ckpt_path = "ckpt/train_velocity_only/ckpt_033123_bs1024_100998.tar"
+    # ckpt_path = f"ckpt/{scene}/train_velocity_only/ckpt_040300_bs1024_010000.tar"
+    # ckpt_path = "ckpt/train_density_only/ckpt_040300_bs1024_010000.tar"
     ckpt_path = ""
 
     if args.option == "train_density_only":
