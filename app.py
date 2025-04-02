@@ -857,7 +857,7 @@ def test_plume_1():
     if args.option == "train_density_only":
         train_density_only(
             scene='plume_1',
-            total_iter=100000,
+            total_iter=10000,
             batch_size=1024,
             depth_size=192,
             ratio=0.5,
@@ -877,9 +877,9 @@ def test_plume_1():
             width=1080,
             height=1920,
             depth_size=192,
-            near=2.,
-            far=4.,
-            frame=80,
+            near=2.5,
+            far=5.4,
+            frame=110,
             ratio=1.0,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
@@ -888,5 +888,5 @@ def test_plume_1():
 
 
 if __name__ == "__main__":
-    test_hyfluid()
-    # test_plume_1()
+    # test_hyfluid()
+    test_plume_1()
