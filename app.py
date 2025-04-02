@@ -43,6 +43,9 @@ camera_calibrations_plume_1 = [
     "data/plume_1/export_cam5.npz",
 ]
 
+training_videos = training_videos_hyfluid
+camera_calibrations = camera_calibrations_hyfluid
+
 
 class TrainModel:
     def __init__(self, batch_size: int, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
@@ -70,26 +73,38 @@ class TrainModel:
         self.scheduler_v = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_v, gamma=gamma)
 
     def _load_dataset(self, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
-        training_videos = training_videos_hyfluid
-        camera_calibrations = camera_calibrations_hyfluid
         find_relative_paths(training_videos)
         find_relative_paths(camera_calibrations)
         self.videos_data = load_videos_data(*training_videos, ratio=ratio, dtype=target_dtype)
         self.poses, self.focals, self.width, self.height, self.near, self.far = load_cameras_data(*camera_calibrations, ratio=ratio, device=target_device, dtype=target_dtype)
 
     def _load_valid_domain(self, target_device: torch.device, target_dtype: torch.dtype):
-        VOXEL_TRAN = torch.tensor([
-            [1.0, 0.0, 7.5497901e-08, 8.1816666e-02],
-            [0.0, 1.0, 0.0, -4.4627272e-02],
-            [7.5497901e-08, 0.0, -1.0, -4.9089999e-03],
-            [0.0, 0.0, 0.0, 1.0]
-        ], device=target_device, dtype=target_dtype)
-        VOXEL_SCALE = torch.tensor([0.4909, 0.73635, 0.4909], device=target_device, dtype=target_dtype)
-        self.s_w2s = torch.inverse(VOXEL_TRAN).expand([4, 4])
-        self.s2w = torch.inverse(self.s_w2s)
-        self.s_scale = VOXEL_SCALE.expand([3])
-        self.s_min = torch.tensor([0.15, 0.0, 0.15], device=target_device, dtype=target_dtype)
-        self.s_max = torch.tensor([0.85, 1.0, 0.85], device=target_device, dtype=target_dtype)
+        if training_videos == training_videos_hyfluid:
+            VOXEL_TRAN = torch.tensor([
+                [1.0, 0.0, 7.5497901e-08, 8.1816666e-02],
+                [0.0, 1.0, 0.0, -4.4627272e-02],
+                [7.5497901e-08, 0.0, -1.0, -4.9089999e-03],
+                [0.0, 0.0, 0.0, 1.0]
+            ], device=target_device, dtype=target_dtype)
+            VOXEL_SCALE = torch.tensor([0.4909, 0.73635, 0.4909], device=target_device, dtype=target_dtype)
+            self.s_w2s = torch.inverse(VOXEL_TRAN).expand([4, 4])
+            self.s2w = torch.inverse(self.s_w2s)
+            self.s_scale = VOXEL_SCALE.expand([3])
+            self.s_min = torch.tensor([0.15, 0.0, 0.15], device=target_device, dtype=target_dtype)
+            self.s_max = torch.tensor([0.85, 1.0, 0.85], device=target_device, dtype=target_dtype)
+        else:
+            VOXEL_TRAN = torch.tensor([
+                [1.0, 0.0, 0.0, -0.4],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, -1.45],
+                [0.0, 0.0, 0.0, 1.0]
+            ], device=target_device, dtype=target_dtype)
+            VOXEL_SCALE = torch.tensor([2.2, 5.0, 2.2], device=target_device, dtype=target_dtype)
+            self.s_w2s = torch.inverse(VOXEL_TRAN).expand([4, 4])
+            self.s2w = torch.inverse(self.s_w2s)
+            self.s_scale = VOXEL_SCALE.expand([3])
+            self.s_min = torch.tensor([0.0, 0.0, 0.0], device=target_device, dtype=target_dtype)
+            self.s_max = torch.tensor([1.0, 1.0, 1.0], device=target_device, dtype=target_dtype)
 
     def optimize_density(self, depth_size: int):
         self.optimizer_d.zero_grad()
