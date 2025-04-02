@@ -404,6 +404,62 @@ class ValidationModel:
         except Exception as e:
             print(f"Error loading model: {e}")
 
+    # @torch.compile
+    def render_frame(self, pose, focal, width, height, depth_size, near, far, frame):
+        with torch.no_grad():
+            poses = pose.unsqueeze(0)
+            focals = focal.unsqueeze(0)
+            dirs, _, _ = shuffle_uv(focals=focals, width=width, height=height, randomize=True, device=torch.device("cpu"), dtype=self.target_dtype)
+            dirs = dirs.to(self.target_device)
+
+            rays_d = torch.einsum('nij,nhwj->nhwi', poses[:, :3, :3], dirs)  # (1, H, W, 3)
+            rays_o = poses[:, None, None, :3, 3].expand(rays_d.shape)  # (1, H, W, 3)
+            rays_d = rays_d.reshape(-1, 3)  # (1*H*W, 3)
+            rays_o = rays_o.reshape(-1, 3)  # (1*H*W, 3)
+            total_ray_size = rays_d.shape[0]
+
+            t_vals = torch.linspace(0., 1., steps=depth_size, device=self.target_device, dtype=self.target_dtype)
+            t_vals = t_vals.view(1, depth_size)
+            z_vals = near * (1. - t_vals) + far * t_vals
+            z_vals = z_vals.expand(total_ray_size, depth_size)
+
+            dist_vals = z_vals[..., 1:] - z_vals[..., :-1]
+            points = rays_o[:, None, :] + rays_d[:, None, :] * z_vals[..., :, None]
+
+            frame_time = torch.tensor(frame / 120.0, device=self.target_device, dtype=self.target_dtype)
+            points_time = torch.cat([points, frame_time.expand(points[..., :1].shape)], dim=-1)
+            points_time_flat = points_time.reshape(-1, 4)
+
+            bbox_mask = insideMask(points_time_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+            points_time_flat_filtered = points_time_flat[bbox_mask]
+
+            total_points_size = points_time_flat.shape[0]
+            total_points_size_filtered = points_time_flat_filtered.shape[0]
+
+            raw_d = torch.zeros([total_points_size, 1], device=self.target_device, dtype=self.target_dtype)
+            raw_d_masked_list = []
+            batch_points_size_filtered = width * depth_size
+            for i in range(0, total_points_size_filtered, batch_points_size_filtered):
+                points_time_flat_batch = points_time_flat_filtered[i:i + batch_points_size_filtered]
+                hidden_batch = self.encoder_d(points_time_flat_batch)
+                raw_d_batch = self.model_d(hidden_batch)
+                raw_d_masked_list.append(raw_d_batch)
+            raw_d_masked = torch.cat(raw_d_masked_list, dim=0)
+            raw_d = raw_d.masked_scatter(bbox_mask, raw_d_masked)
+            raw = raw_d.reshape(total_ray_size, depth_size, 1)
+
+            dists_cat = torch.cat([dist_vals, torch.tensor([1e10], device=self.target_device).expand(dist_vals[..., :1].shape)], -1)
+            dists_final = dists_cat * torch.norm(rays_d[..., None, :], dim=-1)
+
+            rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
+            noise = 0.
+            alpha = 1. - torch.exp(-torch.nn.functional.relu(raw[..., -1] + noise) * dists_final)
+            weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1), device=self.target_device), 1. - alpha + 1e-10], -1), -1)[:, :-1]
+            rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
+
+            rgb_map_final = rgb_map.reshape(height, width, 3)
+            return rgb_map_final
+
     @torch.compile
     def sample_density_grid(self, frame):
         with torch.no_grad():
@@ -668,10 +724,10 @@ def train_joint(total_iter, batch_size, depth_size, ratio, target_device, target
             print(f"{loss_name} loss curve saved to {save_path}")
 
 
-def validate_sample_grid(resx, resy, resz, target_device, target_dtype, ckpt_path):
+def validate_sample_grid(resx, resy, resz, target_device, target_dtype, pretrained_ckpt):
     model = ValidationModel(target_device, target_dtype)
     model.load_sample_coords(resx, resy, resz)
-    model.load_ckpt(ckpt_path, target_device)
+    model.load_ckpt(pretrained_ckpt, target_device)
     os.makedirs('ckpt/sampled_grid', exist_ok=True)
     for frame in tqdm.trange(120):
         raw_d = model.sample_density_grid(frame)
@@ -679,11 +735,22 @@ def validate_sample_grid(resx, resy, resz, target_device, target_dtype, ckpt_pat
         np.savez_compressed(f'ckpt/sampled_grid/sampled_grid_{frame + 1:03d}.npz', den=raw_d.cpu().numpy(), vel=raw_v.cpu().numpy())
 
 
+def validate_render_frame(pose, focal, width, height, depth_size, near, far, frame, target_device, target_dtype, pretrained_ckpt):
+    model = ValidationModel(target_device, target_dtype)
+    model.load_ckpt(pretrained_ckpt, target_device)
+    rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, frame)
+    rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
+    import imageio.v3 as imageio
+    os.makedirs('ckpt/render_frame', exist_ok=True)
+    imageio.imwrite(os.path.join('ckpt/render_frame', 'rgb_{:03d}.png'.format(frame)), rgb8)
+    return rgb8
+
+
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
-    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity_only', 'train_joint', 'validate_sample_grid', 'resimulation'], required=True, help="Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity_only', 'train_joint', 'validate_sample_grid', 'validate_render_frame', 'resimulation'], required=True, help="Choose the operation to execute.")
     parser.add_argument('--ckpt_path', type=str, default="", help="Path to the checkpoint.")
     parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
     args = parser.parse_args()
@@ -727,7 +794,25 @@ if __name__ == "__main__":
             resz=128,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
-            ckpt_path=args.ckpt_path,
+            pretrained_ckpt=args.ckpt_path,
+        )
+
+    if args.option == "validate_render_frame":
+        validate_render_frame(
+            pose=torch.tensor([[0.4863, -0.2431, -0.8393, -0.7697],
+                               [-0.0189, 0.9574, -0.2882, 0.0132],
+                               [0.8736, 0.1560, 0.4610, 0.3250],
+                               [0.0000, 0.0000, 0.0000, 1.0000]], device=torch.device(args.device), dtype=torch.float32),
+            focal=torch.tensor(1306.8817, device=torch.device(args.device), dtype=torch.float32),
+            width=1024,
+            height=1920,
+            depth_size=192,
+            near=1.1,
+            far=1.5,
+            frame=110,
+            target_device=torch.device(args.device),
+            target_dtype=torch.float32,
+            pretrained_ckpt=args.ckpt_path,
         )
 
     if args.option == "resimulation":
