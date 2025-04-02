@@ -409,6 +409,10 @@ class ValidationModel:
         with torch.no_grad():
             poses = pose.unsqueeze(0)
             focals = focal.unsqueeze(0)
+            ratio = 0.5
+            focals = focals * ratio
+            width = int(width * ratio)
+            height = int(height * ratio)
             dirs, _, _ = shuffle_uv(focals=focals, width=width, height=height, randomize=True, device=torch.device("cpu"), dtype=self.target_dtype)
             dirs = dirs.to(self.target_device)
 
@@ -803,7 +807,7 @@ if __name__ == "__main__":
                                [-0.0189, 0.9574, -0.2882, 0.0132],
                                [0.8736, 0.1560, 0.4610, 0.3250],
                                [0.0000, 0.0000, 0.0000, 1.0000]], device=torch.device(args.device), dtype=torch.float32),
-            focal=torch.tensor(1306.8817, device=torch.device(args.device), dtype=torch.float32),
+            focal=torch.tensor(2613.7634, device=torch.device(args.device), dtype=torch.float32),
             width=1024,
             height=1920,
             depth_size=192,
