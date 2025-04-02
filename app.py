@@ -43,8 +43,11 @@ camera_calibrations_plume_1 = [
     "data/plume_1/export_cam5.npz",
 ]
 
-training_videos = training_videos_hyfluid
-camera_calibrations = camera_calibrations_hyfluid
+# training_videos = training_videos_hyfluid
+# camera_calibrations = camera_calibrations_hyfluid
+
+training_videos = training_videos_plume_1
+camera_calibrations = camera_calibrations_plume_1
 
 
 class TrainModel:
@@ -768,9 +771,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
     parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity_only', 'train_joint', 'validate_sample_grid', 'validate_render_frame', 'resimulation'], required=True, help="Choose the operation to execute.")
-    parser.add_argument('--ckpt_path', type=str, default="", help="Path to the checkpoint.")
     parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
     args = parser.parse_args()
+
+    ckpt_path = "ckpt/train_velocity_only/ckpt_033123_bs1024_100998.tar"
 
     if args.option == "train_density_only":
         train_density_only(
@@ -780,7 +784,7 @@ if __name__ == "__main__":
             ratio=0.5,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
-            pretrained_ckpt=args.ckpt_path,
+            pretrained_ckpt=ckpt_path,
         )
 
     if args.option == "train_velocity_only":
@@ -790,7 +794,7 @@ if __name__ == "__main__":
             ratio=0.5,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
-            pretrained_ckpt=args.ckpt_path,
+            pretrained_ckpt=ckpt_path,
         )
 
     if args.option == "train_joint":
@@ -801,7 +805,7 @@ if __name__ == "__main__":
             ratio=0.5,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
-            pretrained_ckpt=args.ckpt_path,
+            pretrained_ckpt=ckpt_path,
         )
 
     if args.option == "validate_sample_grid":
@@ -811,7 +815,7 @@ if __name__ == "__main__":
             resz=128,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
-            pretrained_ckpt=args.ckpt_path,
+            pretrained_ckpt=ckpt_path,
         )
 
     if args.option == "validate_render_frame":
@@ -830,11 +834,11 @@ if __name__ == "__main__":
             ratio=1.0,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
-            pretrained_ckpt=args.ckpt_path,
+            pretrained_ckpt=ckpt_path,
         )
 
     if args.option == "resimulation":
         model = ValidationModel(torch.device(args.device), torch.float32)
         model.load_sample_coords(128, 192, 128)
-        model.load_ckpt(args.ckpt_path, torch.device(args.device))
+        model.load_ckpt(ckpt_path, torch.device(args.device))
         model.resimulation(dt=1.0 / 119.0)
