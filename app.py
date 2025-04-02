@@ -43,18 +43,50 @@ camera_calibrations_plume_1 = [
     "data/plume_1/export_cam5.npz",
 ]
 
-# training_videos = training_videos_hyfluid
-# camera_calibrations = camera_calibrations_hyfluid
 
-training_videos = training_videos_plume_1
-camera_calibrations = camera_calibrations_plume_1
+def load_hyfluid_sample_domain(target_device: torch.device, target_dtype: torch.dtype):
+    VOXEL_TRAN = torch.tensor([
+        [1.0, 0.0, 7.5497901e-08, 8.1816666e-02],
+        [0.0, 1.0, 0.0, -4.4627272e-02],
+        [7.5497901e-08, 0.0, -1.0, -4.9089999e-03],
+        [0.0, 0.0, 0.0, 1.0]
+    ], device=target_device, dtype=target_dtype)
+    VOXEL_SCALE = torch.tensor([0.4909, 0.73635, 0.4909], device=target_device, dtype=target_dtype)
+    s_w2s = torch.inverse(VOXEL_TRAN).expand([4, 4])
+    s2w = torch.inverse(s_w2s)
+    s_scale = VOXEL_SCALE.expand([3])
+    s_min = torch.tensor([0.15, 0.0, 0.15], device=target_device, dtype=target_dtype)
+    s_max = torch.tensor([0.85, 1.0, 0.85], device=target_device, dtype=target_dtype)
+
+    return s_w2s, s2w, s_scale, s_min, s_max
+
+
+def load_plume_1_sample_domain(target_device: torch.device, target_dtype: torch.dtype):
+    VOXEL_TRAN = torch.tensor([
+        [1.0, 0.0, 0.0, -0.4],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, -1.45],
+        [0.0, 0.0, 0.0, 1.0]
+    ], device=target_device, dtype=target_dtype)
+    VOXEL_SCALE = torch.tensor([2.2, 5.0, 2.2], device=target_device, dtype=target_dtype)
+    s_w2s = torch.inverse(VOXEL_TRAN).expand([4, 4])
+    s2w = torch.inverse(s_w2s)
+    s_scale = VOXEL_SCALE.expand([3])
+    s_min = torch.tensor([0.0, 0.0, 0.0], device=target_device, dtype=target_dtype)
+    s_max = torch.tensor([1.0, 1.0, 1.0], device=target_device, dtype=target_dtype)
+
+    return s_w2s, s2w, s_scale, s_min, s_max
 
 
 class TrainModel:
-    def __init__(self, batch_size: int, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
+    def __init__(self, scene, batch_size: int, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
         self._load_model(target_device)
-        self._load_dataset(ratio, target_device, target_dtype)
-        self._load_valid_domain(target_device, target_dtype)
+        if scene == "hyfluid":
+            self._load_dataset(training_videos_hyfluid, camera_calibrations_hyfluid, ratio, target_device, target_dtype)
+            self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = load_hyfluid_sample_domain(target_device, target_dtype)
+        else:
+            self._load_dataset(training_videos_plume_1, camera_calibrations_plume_1, ratio, target_device, target_dtype)
+            self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = load_plume_1_sample_domain(target_device, target_dtype)
         self.target_device = target_device
         self.target_dtype = target_dtype
         self.batch_size = batch_size
@@ -75,39 +107,11 @@ class TrainModel:
         self.scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_d, gamma=gamma)
         self.scheduler_v = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_v, gamma=gamma)
 
-    def _load_dataset(self, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
+    def _load_dataset(self, training_videos, camera_calibrations, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
         find_relative_paths(training_videos)
         find_relative_paths(camera_calibrations)
         self.videos_data = load_videos_data(*training_videos, ratio=ratio, dtype=target_dtype)
         self.poses, self.focals, self.width, self.height, self.near, self.far = load_cameras_data(*camera_calibrations, ratio=ratio, device=target_device, dtype=target_dtype)
-
-    def _load_valid_domain(self, target_device: torch.device, target_dtype: torch.dtype):
-        if training_videos == training_videos_hyfluid:
-            VOXEL_TRAN = torch.tensor([
-                [1.0, 0.0, 7.5497901e-08, 8.1816666e-02],
-                [0.0, 1.0, 0.0, -4.4627272e-02],
-                [7.5497901e-08, 0.0, -1.0, -4.9089999e-03],
-                [0.0, 0.0, 0.0, 1.0]
-            ], device=target_device, dtype=target_dtype)
-            VOXEL_SCALE = torch.tensor([0.4909, 0.73635, 0.4909], device=target_device, dtype=target_dtype)
-            self.s_w2s = torch.inverse(VOXEL_TRAN).expand([4, 4])
-            self.s2w = torch.inverse(self.s_w2s)
-            self.s_scale = VOXEL_SCALE.expand([3])
-            self.s_min = torch.tensor([0.15, 0.0, 0.15], device=target_device, dtype=target_dtype)
-            self.s_max = torch.tensor([0.85, 1.0, 0.85], device=target_device, dtype=target_dtype)
-        else:
-            VOXEL_TRAN = torch.tensor([
-                [1.0, 0.0, 0.0, -0.4],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, -1.45],
-                [0.0, 0.0, 0.0, 1.0]
-            ], device=target_device, dtype=target_dtype)
-            VOXEL_SCALE = torch.tensor([2.2, 5.0, 2.2], device=target_device, dtype=target_dtype)
-            self.s_w2s = torch.inverse(VOXEL_TRAN).expand([4, 4])
-            self.s2w = torch.inverse(self.s_w2s)
-            self.s_scale = VOXEL_SCALE.expand([3])
-            self.s_min = torch.tensor([0.0, 0.0, 0.0], device=target_device, dtype=target_dtype)
-            self.s_max = torch.tensor([1.0, 1.0, 1.0], device=target_device, dtype=target_dtype)
 
     def optimize_density(self, depth_size: int):
         self.optimizer_d.zero_grad()
@@ -349,9 +353,12 @@ class TrainModel:
 
 
 class ValidationModel:
-    def __init__(self, target_device: torch.device, target_dtype: torch.dtype):
+    def __init__(self, scene: str, target_device: torch.device, target_dtype: torch.dtype):
         self._load_model(target_device)
-        self._load_sample_domain(target_device, target_dtype)
+        if scene == "hyfluid":
+            self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = load_hyfluid_sample_domain(target_device, target_dtype)
+        else:
+            self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = load_plume_1_sample_domain(target_device, target_dtype)
         self.target_device = target_device
         self.target_dtype = target_dtype
 
@@ -376,20 +383,6 @@ class ValidationModel:
         self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
         self.encoder_v = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
         self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
-
-    def _load_sample_domain(self, target_device: torch.device, target_dtype: torch.dtype):
-        VOXEL_TRAN = torch.tensor([
-            [1.0, 0.0, 7.5497901e-08, 8.1816666e-02],
-            [0.0, 1.0, 0.0, -4.4627272e-02],
-            [7.5497901e-08, 0.0, -1.0, -4.9089999e-03],
-            [0.0, 0.0, 0.0, 1.0]
-        ], device=target_device, dtype=target_dtype)
-        VOXEL_SCALE = torch.tensor([0.4909, 0.73635, 0.4909], device=target_device, dtype=target_dtype)
-        self.s_w2s = torch.inverse(VOXEL_TRAN).expand([4, 4])
-        self.s2w = torch.inverse(self.s_w2s)
-        self.s_scale = VOXEL_SCALE.expand([3])
-        self.s_min = torch.tensor([0.15, 0.0, 0.15], device=target_device, dtype=target_dtype)
-        self.s_max = torch.tensor([0.85, 1.0, 0.85], device=target_device, dtype=target_dtype)
 
     def load_sample_coords(self, resx, resy, resz):
         if resx == self.resx and resy == self.resy and resz == self.resz:
@@ -535,13 +528,13 @@ class ValidationModel:
                 np.save(os.path.join('ckpt/resimulation', f'density_original_{step + 1:03d}.npy'), source.cpu().numpy())
 
 
-def train_density_only(total_iter, batch_size, depth_size, ratio, target_device, target_dtype, pretrained_ckpt=None):
+def train_density_only(scene, total_iter, batch_size, depth_size, ratio, target_device, target_dtype, pretrained_ckpt=None):
     losses = []
     steps = []
     avg_losses = []
     avg_steps = []
 
-    model = TrainModel(batch_size, ratio, target_device, target_dtype)
+    model = TrainModel(scene, batch_size, ratio, target_device, target_dtype)
     if pretrained_ckpt:
         model.load_ckpt(pretrained_ckpt, target_device)
     try:
@@ -582,7 +575,7 @@ def train_density_only(total_iter, batch_size, depth_size, ratio, target_device,
         print(f"Image loss curve saved to {save_path}")
 
 
-def train_velocity_only(total_iter, batch_size, ratio, target_device, target_dtype, pretrained_ckpt=None):
+def train_velocity_only(scene, total_iter, batch_size, ratio, target_device, target_dtype, pretrained_ckpt=None):
     losses_nseloss_fine = []
     losses_proj = []
     losses_min_vel_reg = []
@@ -594,7 +587,7 @@ def train_velocity_only(total_iter, batch_size, ratio, target_device, target_dty
     ave_losses = []
     avg_steps = []
 
-    model = TrainModel(batch_size, ratio, target_device, target_dtype)
+    model = TrainModel(scene, batch_size, ratio, target_device, target_dtype)
     if pretrained_ckpt:
         model.load_ckpt(pretrained_ckpt, target_device)
     try:
@@ -666,7 +659,7 @@ def train_velocity_only(total_iter, batch_size, ratio, target_device, target_dty
             print(f"{loss_name} loss curve saved to {save_path}")
 
 
-def train_joint(total_iter, batch_size, depth_size, ratio, target_device, target_dtype, pretrained_ckpt=None):
+def train_joint(scene, total_iter, batch_size, depth_size, ratio, target_device, target_dtype, pretrained_ckpt=None):
     losses_nseloss_fine = []
     losses_img = []
     losses_proj = []
@@ -678,7 +671,7 @@ def train_joint(total_iter, batch_size, depth_size, ratio, target_device, target
     avg_losses_min_vel_reg = []
     avg_steps = []
 
-    model = TrainModel(batch_size, ratio, target_device, target_dtype)
+    model = TrainModel(scene, batch_size, ratio, target_device, target_dtype)
     if pretrained_ckpt:
         model.load_ckpt(pretrained_ckpt, target_device)
     try:
@@ -744,8 +737,8 @@ def train_joint(total_iter, batch_size, depth_size, ratio, target_device, target
             print(f"{loss_name} loss curve saved to {save_path}")
 
 
-def validate_sample_grid(resx, resy, resz, target_device, target_dtype, pretrained_ckpt):
-    model = ValidationModel(target_device, target_dtype)
+def validate_sample_grid(scene, resx, resy, resz, target_device, target_dtype, pretrained_ckpt):
+    model = ValidationModel(scene, target_device, target_dtype)
     model.load_sample_coords(resx, resy, resz)
     model.load_ckpt(pretrained_ckpt, target_device)
     os.makedirs('ckpt/sampled_grid', exist_ok=True)
@@ -755,8 +748,8 @@ def validate_sample_grid(resx, resy, resz, target_device, target_dtype, pretrain
         np.savez_compressed(f'ckpt/sampled_grid/sampled_grid_{frame + 1:03d}.npz', den=raw_d.cpu().numpy(), vel=raw_v.cpu().numpy())
 
 
-def validate_render_frame(pose, focal, width, height, depth_size, near, far, frame, ratio, target_device, target_dtype, pretrained_ckpt):
-    model = ValidationModel(target_device, target_dtype)
+def validate_render_frame(scene, pose, focal, width, height, depth_size, near, far, frame, ratio, target_device, target_dtype, pretrained_ckpt):
+    model = ValidationModel(scene, target_device, target_dtype)
     model.load_ckpt(pretrained_ckpt, target_device)
     rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, frame, ratio)
     rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
@@ -766,7 +759,7 @@ def validate_render_frame(pose, focal, width, height, depth_size, near, far, fra
     return rgb8
 
 
-if __name__ == "__main__":
+def test_hyfluid():
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
@@ -774,11 +767,13 @@ if __name__ == "__main__":
     parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
     args = parser.parse_args()
 
-    ckpt_path = "ckpt/train_velocity_only/ckpt_033123_bs1024_100998.tar"
+    # ckpt_path = "ckpt/train_velocity_only/ckpt_033123_bs1024_100998.tar"
+    ckpt_path = ""
 
     if args.option == "train_density_only":
         train_density_only(
-            total_iter=1000,
+            scene='hyfluid',
+            total_iter=10000,
             batch_size=1024,
             depth_size=192,
             ratio=0.5,
@@ -789,6 +784,7 @@ if __name__ == "__main__":
 
     if args.option == "train_velocity_only":
         train_velocity_only(
+            scene='hyfluid',
             total_iter=1000,
             batch_size=1024,
             ratio=0.5,
@@ -799,6 +795,7 @@ if __name__ == "__main__":
 
     if args.option == "train_joint":
         train_joint(
+            scene='hyfluid',
             total_iter=1000,
             batch_size=1024,
             depth_size=192,
@@ -810,6 +807,7 @@ if __name__ == "__main__":
 
     if args.option == "validate_sample_grid":
         validate_sample_grid(
+            scene='hyfluid',
             resx=128,
             resy=192,
             resz=128,
@@ -820,6 +818,7 @@ if __name__ == "__main__":
 
     if args.option == "validate_render_frame":
         validate_render_frame(
+            scene='hyfluid',
             pose=torch.tensor([[0.4863, -0.2431, -0.8393, -0.7697],
                                [-0.0189, 0.9574, -0.2882, 0.0132],
                                [0.8736, 0.1560, 0.4610, 0.3250],
@@ -838,7 +837,56 @@ if __name__ == "__main__":
         )
 
     if args.option == "resimulation":
-        model = ValidationModel(torch.device(args.device), torch.float32)
+        model = ValidationModel('hyfluid', torch.device(args.device), torch.float32)
         model.load_sample_coords(128, 192, 128)
         model.load_ckpt(ckpt_path, torch.device(args.device))
         model.resimulation(dt=1.0 / 119.0)
+
+
+def test_plume_1():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run training or validation.")
+    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity_only', 'train_joint', 'validate_sample_grid', 'validate_render_frame', 'resimulation'], required=True, help="Choose the operation to execute.")
+    parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
+    args = parser.parse_args()
+
+    # ckpt_path = "ckpt/train_density_only/ckpt_040221_bs1024_100000.tar"
+    ckpt_path = ""
+
+    if args.option == "train_density_only":
+        train_density_only(
+            scene='plume_1',
+            total_iter=100000,
+            batch_size=1024,
+            depth_size=192,
+            ratio=0.5,
+            target_device=torch.device(args.device),
+            target_dtype=torch.float32,
+            pretrained_ckpt=ckpt_path,
+        )
+
+    if args.option == "validate_render_frame":
+        validate_render_frame(
+            scene='hyfluid',
+            pose=torch.tensor([[-6.5174e-01, 7.3241e-02, 7.5490e-01, 3.5361e+00],
+                               [-6.9389e-18, 9.9533e-01, -9.6567e-02, 1.9000e+00],
+                               [-7.5844e-01, -6.2937e-02, -6.4869e-01, -2.6511e+00],
+                               [0.0000e+00, 0.0000e+00, 0.0000e+00, 1.0000e+00]], device=torch.device(args.device), dtype=torch.float32),
+            focal=torch.tensor(1303.6753, device=torch.device(args.device), dtype=torch.float32),
+            width=1080,
+            height=1920,
+            depth_size=192,
+            near=2.,
+            far=4.,
+            frame=80,
+            ratio=1.0,
+            target_device=torch.device(args.device),
+            target_dtype=torch.float32,
+            pretrained_ckpt=ckpt_path,
+        )
+
+
+if __name__ == "__main__":
+    test_hyfluid()
+    # test_plume_1()
