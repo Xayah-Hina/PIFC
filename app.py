@@ -728,10 +728,9 @@ def train_joint(scene, total_iter, batch_size, depth_size, ratio, target_device,
             plt.title(f'{title} vs. Global Step')
             plt.legend()
             plt.grid(True)
-            plt.show()
-
             # 保存图片
             plt.savefig(save_path)
+            plt.show()
             plt.close()
 
             print(f"{loss_name} loss curve saved to {save_path}")
