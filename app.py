@@ -567,9 +567,8 @@ def train_density_only(scene, total_iter, batch_size, depth_size, ratio, target_
         plt.title('Average Image Loss vs. Global Step')
         plt.legend()
         plt.grid(True)
-        plt.show()
-
         plt.savefig(save_path)
+        plt.show()
         plt.close()
 
         print(f"Image loss curve saved to {save_path}")
@@ -650,10 +649,8 @@ def train_velocity_only(scene, total_iter, batch_size, ratio, target_device, tar
             plt.title(f'{title} vs. Global Step')
             plt.legend()
             plt.grid(True)
-            plt.show()
-
-            # 保存图片
             plt.savefig(save_path)
+            plt.show()
             plt.close()
 
             print(f"{loss_name} loss curve saved to {save_path}")
@@ -728,7 +725,6 @@ def train_joint(scene, total_iter, batch_size, depth_size, ratio, target_device,
             plt.title(f'{title} vs. Global Step')
             plt.legend()
             plt.grid(True)
-            # 保存图片
             plt.savefig(save_path)
             plt.show()
             plt.close()
@@ -867,6 +863,29 @@ def test_plume_1():
         train_density_only(
             scene='plume_1',
             total_iter=10000,
+            batch_size=1024,
+            depth_size=192,
+            ratio=0.5,
+            target_device=torch.device(args.device),
+            target_dtype=torch.float32,
+            pretrained_ckpt=ckpt_path,
+        )
+
+    if args.option == "train_velocity_only":
+        train_velocity_only(
+            scene='plume_1',
+            total_iter=1000,
+            batch_size=1024,
+            ratio=0.5,
+            target_device=torch.device(args.device),
+            target_dtype=torch.float32,
+            pretrained_ckpt=ckpt_path,
+        )
+
+    if args.option == "train_joint":
+        train_joint(
+            scene='plume_1',
+            total_iter=1000,
             batch_size=1024,
             depth_size=192,
             ratio=0.5,
