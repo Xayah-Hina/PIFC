@@ -764,7 +764,7 @@ def validate_render_frame(scene, pose, focal, width, height, depth_size, near, f
         raise ValueError("frame should be an integer or a list of integers.")
 
 
-def test_hyfluid():
+if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
@@ -772,16 +772,43 @@ def test_hyfluid():
     parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
     args = parser.parse_args()
 
+    # scene = 'hyfluid'
+    scene = 'plume_1'
+
+    if scene == 'hyfluid':
+        test_pose = torch.tensor([[0.4863, -0.2431, -0.8393, -0.7697],
+                                  [-0.0189, 0.9574, -0.2882, 0.0132],
+                                  [0.8736, 0.1560, 0.4610, 0.3250],
+                                  [0.0000, 0.0000, 0.0000, 1.0000]], device=torch.device(args.device), dtype=torch.float32)
+        test_focal = torch.tensor(2613.7634, device=torch.device(args.device), dtype=torch.float32)
+        test_near = 1.1
+        test_far = 1.5
+    else:
+        test_pose = torch.tensor([[-6.5174e-01, 7.3241e-02, 7.5490e-01, 3.5361e+00],
+                                  [-6.9389e-18, 9.9533e-01, -9.6567e-02, 1.9000e+00],
+                                  [-7.5844e-01, -6.2937e-02, -6.4869e-01, -2.6511e+00],
+                                  [0.0000e+00, 0.0000e+00, 0.0000e+00, 1.0000e+00]], device=torch.device(args.device), dtype=torch.float32)
+        test_focal = torch.tensor(1303.6753, device=torch.device(args.device), dtype=torch.float32)
+        test_near = 2.5
+        test_far = 5.4
+
+    total_iter = 10000
+    batch_size = 1024
+    depth_size = 192
+    ratio = 0.5
+    width, height = 1080, 1920
+    resx, resy, resz = 128, 192, 128
+
     # ckpt_path = "ckpt/train_velocity_only/ckpt_033123_bs1024_100998.tar"
     ckpt_path = ""
 
     if args.option == "train_density_only":
         train_density_only(
-            scene='hyfluid',
-            total_iter=10000,
-            batch_size=1024,
-            depth_size=192,
-            ratio=0.5,
+            scene=scene,
+            total_iter=total_iter,
+            batch_size=batch_size,
+            depth_size=depth_size,
+            ratio=ratio,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
             pretrained_ckpt=ckpt_path,
@@ -789,10 +816,10 @@ def test_hyfluid():
 
     if args.option == "train_velocity_only":
         train_velocity_only(
-            scene='hyfluid',
-            total_iter=1000,
-            batch_size=1024,
-            ratio=0.5,
+            scene=scene,
+            total_iter=total_iter,
+            batch_size=batch_size,
+            ratio=ratio,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
             pretrained_ckpt=ckpt_path,
@@ -800,11 +827,11 @@ def test_hyfluid():
 
     if args.option == "train_joint":
         train_joint(
-            scene='hyfluid',
-            total_iter=1000,
-            batch_size=1024,
-            depth_size=192,
-            ratio=0.5,
+            scene=scene,
+            total_iter=total_iter,
+            batch_size=batch_size,
+            depth_size=depth_size,
+            ratio=ratio,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
             pretrained_ckpt=ckpt_path,
@@ -812,10 +839,10 @@ def test_hyfluid():
 
     if args.option == "validate_sample_grid":
         validate_sample_grid(
-            scene='hyfluid',
-            resx=128,
-            resy=192,
-            resz=128,
+            scene=scene,
+            resx=resx,
+            resy=resy,
+            resz=resz,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
             pretrained_ckpt=ckpt_path,
@@ -823,98 +850,23 @@ def test_hyfluid():
 
     if args.option == "validate_render_frame":
         validate_render_frame(
-            scene='hyfluid',
-            pose=torch.tensor([[0.4863, -0.2431, -0.8393, -0.7697],
-                               [-0.0189, 0.9574, -0.2882, 0.0132],
-                               [0.8736, 0.1560, 0.4610, 0.3250],
-                               [0.0000, 0.0000, 0.0000, 1.0000]], device=torch.device(args.device), dtype=torch.float32),
-            focal=torch.tensor(2613.7634, device=torch.device(args.device), dtype=torch.float32),
-            width=1080,
-            height=1920,
-            depth_size=192,
-            near=1.1,
-            far=1.5,
-            frame=80,
-            ratio=1.0,
+            scene=scene,
+            pose=test_pose,
+            focal=test_focal,
+            width=width,
+            height=height,
+            depth_size=depth_size,
+            near=test_near,
+            far=test_far,
+            frame=list(reversed(range(120))),
+            ratio=ratio,
             target_device=torch.device(args.device),
             target_dtype=torch.float32,
             pretrained_ckpt=ckpt_path,
         )
 
     if args.option == "resimulation":
-        model = ValidationModel('hyfluid', torch.device(args.device), torch.float32)
-        model.load_sample_coords(128, 192, 128)
+        model = ValidationModel(scene, torch.device(args.device), torch.float32)
+        model.load_sample_coords(resx, resy, resz)
         model.load_ckpt(ckpt_path, torch.device(args.device))
         model.resimulation(dt=1.0 / 119.0)
-
-
-def test_plume_1():
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Run training or validation.")
-    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity_only', 'train_joint', 'validate_sample_grid', 'validate_render_frame', 'resimulation'], required=True, help="Choose the operation to execute.")
-    parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
-    args = parser.parse_args()
-
-    ckpt_path = "ckpt/train_density_only/ckpt_040223_bs1024_010000.tar"
-    # ckpt_path = ""
-
-    if args.option == "train_density_only":
-        train_density_only(
-            scene='plume_1',
-            total_iter=10000,
-            batch_size=1024,
-            depth_size=192,
-            ratio=0.5,
-            target_device=torch.device(args.device),
-            target_dtype=torch.float32,
-            pretrained_ckpt=ckpt_path,
-        )
-
-    if args.option == "train_velocity_only":
-        train_velocity_only(
-            scene='plume_1',
-            total_iter=1000,
-            batch_size=1024,
-            ratio=0.5,
-            target_device=torch.device(args.device),
-            target_dtype=torch.float32,
-            pretrained_ckpt=ckpt_path,
-        )
-
-    if args.option == "train_joint":
-        train_joint(
-            scene='plume_1',
-            total_iter=1000,
-            batch_size=1024,
-            depth_size=192,
-            ratio=0.5,
-            target_device=torch.device(args.device),
-            target_dtype=torch.float32,
-            pretrained_ckpt=ckpt_path,
-        )
-
-    if args.option == "validate_render_frame":
-        validate_render_frame(
-            scene='plume_1',
-            pose=torch.tensor([[-6.5174e-01, 7.3241e-02, 7.5490e-01, 3.5361e+00],
-                               [-6.9389e-18, 9.9533e-01, -9.6567e-02, 1.9000e+00],
-                               [-7.5844e-01, -6.2937e-02, -6.4869e-01, -2.6511e+00],
-                               [0.0000e+00, 0.0000e+00, 0.0000e+00, 1.0000e+00]], device=torch.device(args.device), dtype=torch.float32),
-            focal=torch.tensor(1303.6753, device=torch.device(args.device), dtype=torch.float32),
-            width=1080,
-            height=1920,
-            depth_size=192,
-            near=2.5,
-            far=5.4,
-            frame=list(reversed(range(120))),
-            ratio=1.0,
-            target_device=torch.device(args.device),
-            target_dtype=torch.float32,
-            pretrained_ckpt=ckpt_path,
-        )
-
-
-if __name__ == "__main__":
-    # test_hyfluid()
-    test_plume_1()
