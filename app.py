@@ -733,35 +733,57 @@ def train_joint(scene, total_iter, batch_size, depth_size, ratio, target_device,
 
 
 def validate_sample_grid(scene, resx, resy, resz, target_device, target_dtype, pretrained_ckpt):
-    model = ValidationModel(scene, target_device, target_dtype)
-    model.load_sample_coords(resx, resy, resz)
-    model.load_ckpt(pretrained_ckpt, target_device)
-    os.makedirs(f'ckpt/{scene}/sampled_grid', exist_ok=True)
-    for frame in tqdm.trange(120):
-        raw_d = model.sample_density_grid(frame)
-        raw_v = model.sample_velocity_grid(frame)
-        np.savez_compressed(f'ckpt/{scene}/sampled_grid/sampled_grid_{frame + 1:03d}.npz', den=raw_d.cpu().numpy(), vel=raw_v.cpu().numpy())
+    with torch.no_grad():
+        model = ValidationModel(scene, target_device, target_dtype)
+        model.load_sample_coords(resx, resy, resz)
+        model.load_ckpt(pretrained_ckpt, target_device)
+        os.makedirs(f'ckpt/{scene}/sampled_grid', exist_ok=True)
+        for frame in tqdm.trange(120):
+            raw_d = model.sample_density_grid(frame)
+            raw_v = model.sample_velocity_grid(frame)
+            np.savez_compressed(f'ckpt/{scene}/sampled_grid/sampled_grid_{frame + 1:03d}.npz', den=raw_d.cpu().numpy(), vel=raw_v.cpu().numpy())
 
 
 def validate_render_frame(scene, pose, focal, width, height, depth_size, near, far, frame, ratio, target_device, target_dtype, pretrained_ckpt):
-    model = ValidationModel(scene, target_device, target_dtype)
-    model.load_ckpt(pretrained_ckpt, target_device)
+    with torch.no_grad():
+        model = ValidationModel(scene, target_device, target_dtype)
+        model.load_ckpt(pretrained_ckpt, target_device)
 
-    if isinstance(frame, int):
-        rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, frame, ratio)
-        rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
-        import imageio.v3 as imageio
-        os.makedirs(f'ckpt/{scene}/render_frame', exist_ok=True)
-        imageio.imwrite(os.path.join(f'ckpt/{scene}/render_frame', 'rgb_{:03d}.png'.format(frame)), rgb8)
-    elif isinstance(frame, list):
-        for f in tqdm.tqdm(frame, desc="Rendering frames", unit="frame"):
-            rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, f, ratio)
+        if isinstance(frame, int):
+            rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, frame, ratio)
             rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
             import imageio.v3 as imageio
             os.makedirs(f'ckpt/{scene}/render_frame', exist_ok=True)
-            imageio.imwrite(os.path.join(f'ckpt/{scene}/render_frame', 'rgb_{:03d}.png'.format(f)), rgb8)
-    else:
-        raise ValueError("frame should be an integer or a list of integers.")
+            imageio.imwrite(os.path.join(f'ckpt/{scene}/render_frame', 'rgb_{:03d}.png'.format(frame)), rgb8)
+        elif isinstance(frame, list):
+            for f in tqdm.tqdm(frame, desc="Rendering frames", unit="frame"):
+                rgb_map_final = model.render_frame(pose, focal, width, height, depth_size, near, far, f, ratio)
+                rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
+                import imageio.v3 as imageio
+                os.makedirs(f'ckpt/{scene}/render_frame', exist_ok=True)
+                imageio.imwrite(os.path.join(f'ckpt/{scene}/render_frame', 'rgb_{:03d}.png'.format(f)), rgb8)
+        else:
+            raise ValueError("frame should be an integer or a list of integers.")
+
+
+def validate_resimulation(scene, resx, resy, resz, dt, target_device, target_dtype, pretrained_ckpt):
+    with torch.no_grad():
+        model = ValidationModel(scene, target_device, target_dtype)
+        model.load_sample_coords(resx, resy, resz)
+        model.load_ckpt(pretrained_ckpt, target_device)
+
+        source_height = 0.15
+        den = model.sample_density_grid(0)
+        source = den
+        for step in tqdm.trange(120):
+            if step > 0:
+                vel = model.sample_velocity_grid(step - 1)
+                vel_sim_confined = world2sim_rot(vel, model.s_w2s, model.s_scale)
+                source = model.sample_density_grid(step)
+                den = model.advect_density(den, vel_sim_confined, source, dt, model.coord_3d_sim[..., 1] > source_height)
+            os.makedirs('ckpt/resimulation', exist_ok=True)
+            np.save(os.path.join('ckpt/resimulation', f'density_advected_{step + 1:03d}.npy'), den.cpu().numpy())
+            np.save(os.path.join('ckpt/resimulation', f'density_original_{step + 1:03d}.npy'), source.cpu().numpy())
 
 
 if __name__ == "__main__":
@@ -867,7 +889,13 @@ if __name__ == "__main__":
         )
 
     if args.option == "resimulation":
-        model = ValidationModel(scene, torch.device(args.device), torch.float32)
-        model.load_sample_coords(resx, resy, resz)
-        model.load_ckpt(ckpt_path, torch.device(args.device))
-        model.resimulation(dt=1.0 / 119.0)
+        validate_resimulation(
+            scene=scene,
+            resx=resx,
+            resy=resy,
+            resz=resz,
+            dt=1.0 / 119.0,
+            target_device=torch.device(args.device),
+            target_dtype=torch.float32,
+            pretrained_ckpt=ckpt_path,
+        )
