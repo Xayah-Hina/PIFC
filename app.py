@@ -821,9 +821,10 @@ if __name__ == "__main__":
     width, height = 1080, 1920
     resx, resy, resz = 128, 192, 128
 
-    # ckpt_path = f"ckpt/{scene}/train_velocity_only/ckpt_040300_bs1024_010000.tar"
-    # ckpt_path = "ckpt/train_density_only/ckpt_040300_bs1024_010000.tar"
-    ckpt_path = f"ckpt/{scene}/train_joint/ckpt_040211_bs1024_054001.tar"
+    # ckpt_path = "ckpt/history/ckpt_040117_bs1024_200996.tar"
+    # ckpt_path = f"ckpt/{scene}/train_velocity_only/ckpt_040319_bs1024_200000.tar"
+    # ckpt_path = f"ckpt/{scene}/train_joint/ckpt_040320_bs1024_100000.tar"
+    ckpt_path = ""
 
     if args.option == "train_density_only":
         train_density_only(
