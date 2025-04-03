@@ -781,9 +781,9 @@ def validate_resimulation(scene, resx, resy, resz, dt, target_device, target_dty
                 vel_sim_confined = world2sim_rot(vel, model.s_w2s, model.s_scale)
                 source = model.sample_density_grid(step)
                 den = model.advect_density(den, vel_sim_confined, source, dt, model.coord_3d_sim[..., 1] > source_height)
-            os.makedirs('ckpt/resimulation', exist_ok=True)
-            np.save(os.path.join('ckpt/resimulation', f'density_advected_{step + 1:03d}.npy'), den.cpu().numpy())
-            np.save(os.path.join('ckpt/resimulation', f'density_original_{step + 1:03d}.npy'), source.cpu().numpy())
+            os.makedirs(f'ckpt/{scene}/resimulation', exist_ok=True)
+            np.save(os.path.join(f'ckpt/{scene}/resimulation', f'density_advected_{step + 1:03d}.npy'), den.cpu().numpy())
+            np.save(os.path.join(f'ckpt/{scene}/resimulation', f'density_original_{step + 1:03d}.npy'), source.cpu().numpy())
 
 
 if __name__ == "__main__":
@@ -794,8 +794,8 @@ if __name__ == "__main__":
     parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
     args = parser.parse_args()
 
-    # scene = 'hyfluid'
-    scene = 'plume_1'
+    scene = 'hyfluid'
+    # scene = 'plume_1'
 
     if scene == 'hyfluid':
         test_pose = torch.tensor([[0.4863, -0.2431, -0.8393, -0.7697],
@@ -823,7 +823,7 @@ if __name__ == "__main__":
 
     # ckpt_path = f"ckpt/{scene}/train_velocity_only/ckpt_040300_bs1024_010000.tar"
     # ckpt_path = "ckpt/train_density_only/ckpt_040300_bs1024_010000.tar"
-    ckpt_path = ""
+    ckpt_path = f"ckpt/{scene}/train_joint/ckpt_040211_bs1024_054001.tar"
 
     if args.option == "train_density_only":
         train_density_only(
