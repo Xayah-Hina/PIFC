@@ -12,6 +12,7 @@ set "OPTION=evaluate_resimulation"
 
 REM 调用 Python 脚本
 "C:/Program Files/Side Effects Software/Houdini 20.5.550/python311/python.exe" run_hyfluid.py --option=%OPTION% --checkpoint="%CKPT%"
+"C:/Program Files/Side Effects Software/Houdini 20.5.550/bin/hython.exe" houdini/visualize_npz.py
 
 REM 可选：运行完暂停窗口
 pause
