@@ -204,10 +204,10 @@ class TrainVelocityModel(_TrainModelBase):
         if self.points_generator is None:
             self.points_generator = sample_bbox(self.resx, self.resy, self.resz, batch_size, True, self.target_device, self.target_dtype, self.s2w, self.s_w2s, self.s_scale, self.s_min, self.s_max)
         try:
-            return next(self.generator)
+            return next(self.points_generator)
         except StopIteration:
             self.points_generator = sample_bbox(self.resx, self.resy, self.resz, batch_size, True, self.target_device, self.target_dtype, self.s2w, self.s_w2s, self.s_scale, self.s_min, self.s_max)
-            return next(self.generator)
+            return next(self.points_generator)
 
     def velocity_loss(self, batch_points):
         def g(x):
