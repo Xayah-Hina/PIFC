@@ -21,6 +21,10 @@ class TrainConfig:
     depth_size: int
     ratio: float
 
+    # ckpt parameters
+    use_mid_ckpts: bool
+    mid_ckpts_iters: int
+
     def __post_init__(self):
         import yaml
         import os

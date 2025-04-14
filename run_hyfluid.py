@@ -20,6 +20,9 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
         for _ in tqdm.trange(total_iter):
             img_loss = model.forward(config.batch_size, config.depth_size)
             writer.add_scalar(f"Loss/{date}/img_loss", img_loss, _)
+
+            if config.use_mid_ckpts and model.global_step % config.mid_ckpts_iters == 0:
+                model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
     except Exception as e:
         print(e)
     finally:
@@ -43,6 +46,9 @@ def train_velocity(config: TrainConfig, resx: int, resy: int, resz: int, total_i
             writer.add_scalar(f"Loss/{date}/nseloss_fine", nseloss_fine, _)
             writer.add_scalar(f"Loss/{date}/proj_loss", proj_loss, _)
             writer.add_scalar(f"Loss/{date}/min_vel_reg", min_vel_reg, _)
+
+            if config.use_mid_ckpts and model.global_step % config.mid_ckpts_iters == 0:
+                model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
     except Exception as e:
         print(e)
     finally:
@@ -67,6 +73,9 @@ def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
             writer.add_scalar(f"Loss/{date}/img_loss", img_loss, _)
             writer.add_scalar(f"Loss/{date}/proj_loss", proj_loss, _)
             writer.add_scalar(f"Loss/{date}/min_vel_reg", min_vel_reg, _)
+
+            if config.use_mid_ckpts and model.global_step % config.mid_ckpts_iters == 0:
+                model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
     except Exception as e:
         print(e)
     finally:
@@ -133,6 +142,8 @@ if __name__ == "__main__":
     parser.add_argument('--resx', type=int, default=128, help="Resolution in x direction.")
     parser.add_argument('--resy', type=int, default=192, help="Resolution in y direction.")
     parser.add_argument('--resz', type=int, default=128, help="Resolution in z direction.")
+    parser.add_argument('--use_mid_ckpts', type=bool, default=False, help="Use mid-ckpts iteration.")
+    parser.add_argument('--mid_ckpts_iters', type=int, default=2000, help="Mid-ckpts iteration.")
     args = parser.parse_args()
 
     if args.option == "train_density_only":
@@ -144,6 +155,8 @@ if __name__ == "__main__":
                 batch_size=args.batch_size,
                 depth_size=args.depth_size,
                 ratio=args.ratio,
+                use_mid_ckpts=args.use_mid_ckpts,
+                mid_ckpts_iters=args.mid_ckpts_iters,
             ),
             total_iter=args.total_iter,
             pretrained_ckpt=args.checkpoint,
@@ -158,6 +171,8 @@ if __name__ == "__main__":
                 batch_size=args.batch_size,
                 depth_size=args.depth_size,
                 ratio=args.ratio,
+                use_mid_ckpts=args.use_mid_ckpts,
+                mid_ckpts_iters=args.mid_ckpts_iters,
             ),
             resx=args.resx,
             resy=args.resy,
@@ -175,6 +190,8 @@ if __name__ == "__main__":
                 batch_size=args.batch_size,
                 depth_size=args.depth_size,
                 ratio=args.ratio,
+                use_mid_ckpts=args.use_mid_ckpts,
+                mid_ckpts_iters=args.mid_ckpts_iters,
             ),
             total_iter=args.total_iter,
             pretrained_ckpt=args.checkpoint,
