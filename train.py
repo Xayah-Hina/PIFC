@@ -1,0 +1,170 @@
+from lib.dataset import *
+from lib.frustum import *
+# from lib.solver import *
+from model.encoder_hyfluid import *
+from model.model_hyfluid import *
+
+import torch
+import dataclasses
+import math
+import typing
+import tqdm
+
+
+# import os
+
+
+@dataclasses.dataclass
+class TrainConfig:
+    # general parameters
+    target_device: torch.device
+    target_dtype: torch.dtype
+
+    # datasets
+    dataset_name: str
+    training_videos: typing.List[str]
+    camera_calibrations: typing.List[str]
+
+    # training parameters
+    batch_size: int
+    ratio: float
+
+    # spatial parameters
+    voxel_transform: torch.Tensor
+    voxel_scale: torch.Tensor
+
+    def __post_init__(self):
+        self.voxel_transform = self.voxel_transform.to(self.target_device, dtype=self.target_dtype)
+        self.voxel_scale = self.voxel_scale.to(self.target_device, dtype=self.target_dtype)
+        self.s_w2s = torch.inverse(self.voxel_transform).expand([4, 4])
+        self.s2w = torch.inverse(self.s_w2s)
+        self.s_scale = self.voxel_scale.expand([3])
+        self.s_min = torch.tensor([0.0, 0.0, 0.0], device=self.target_device, dtype=self.target_dtype)
+        self.s_max = torch.tensor([1.0, 1.0, 1.0], device=self.target_device, dtype=self.target_dtype)
+
+
+class TrainModelBase:
+    def __init__(self, config: TrainConfig):
+        self._load_model(config.target_device)
+        self._load_dataset(config.training_videos, config.camera_calibrations, config.ratio, config.target_device, config.target_dtype)
+
+        self.config = config
+        self.target_device = config.target_device  # alias for self.config.target_device
+        self.target_dtype = config.target_dtype  # alias for self.config.target_dtype
+        self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = config.s_w2s, config.s2w, config.s_scale, config.s_min, config.s_max
+
+        self.generator = None
+        self.videos_data_resampled = None
+        self.global_step = 0
+
+    def _load_model(self, target_device: torch.device):
+        self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
+        self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
+        self.optimizer_d = torch.optim.RAdam([{'params': self.model_d.parameters(), 'weight_decay': 1e-6}, {'params': self.encoder_d.parameters(), 'eps': 1e-15}], lr=0.001, betas=(0.9, 0.99))
+        self.encoder_v = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
+        self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
+        self.optimizer_v = torch.optim.RAdam([{'params': self.model_v.parameters(), 'weight_decay': 1e-6}, {'params': self.encoder_v.parameters(), 'eps': 1e-15}], lr=0.001, betas=(0.9, 0.99))
+
+        target_lr_ratio = 0.001
+        gamma = math.exp(math.log(target_lr_ratio) / 100000)
+        self.scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_d, gamma=gamma)
+        self.scheduler_v = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_v, gamma=gamma)
+
+    def _load_dataset(self, training_videos, camera_calibrations, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
+        assert len(training_videos) == len(camera_calibrations), "Number of videos and camera calibrations must match."
+        self.videos_data = load_videos_data(*training_videos, ratio=ratio, dtype=target_dtype)
+        self.poses, self.focals, self.width, self.height, self.near, self.far = load_cameras_data(*camera_calibrations, ratio=ratio, device=target_device, dtype=target_dtype)
+
+    def _next_batch(self, batch_size: int):
+        if self.generator is None:
+            self.generator, self.videos_data_resampled = refresh_generator(batch_size, self.videos_data, self.poses, self.focals, int(self.width[0].item()), int(self.height[0].item()), self.target_device, self.target_dtype)
+        try:
+            return next(self.generator)
+        except StopIteration:
+            self.generator, self.videos_data_resampled = refresh_generator(batch_size, self.videos_data, self.poses, self.focals, int(self.width[0].item()), int(self.height[0].item()), self.target_device, self.target_dtype)
+            return next(self.generator)
+
+    def save_ckpt(self, directory: str, final: bool):
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%m%d%H')
+        filename = 'ckpt_{}_{}_{:06d}.tar'.format(self.config.dataset_name, timestamp, self.global_step)
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, filename)
+        if final:
+            torch.save({
+                'model_d': self.model_d.state_dict(),
+                'encoder_d': self.encoder_d.state_dict(),
+                'model_v': self.model_v.state_dict(),
+                'encoder_v': self.encoder_v.state_dict(),
+                'global_step': self.global_step,
+                'config': self.config,
+            }, path)
+        else:
+            torch.save({
+                'model_d': self.model_d.state_dict(),
+                'encoder_d': self.encoder_d.state_dict(),
+                'optimizer_d': self.optimizer_d.state_dict(),
+                'model_v': self.model_v.state_dict(),
+                'encoder_v': self.encoder_v.state_dict(),
+                'optimizer_v': self.optimizer_v.state_dict(),
+                'global_step': self.global_step,
+                'config': self.config,
+            }, path)
+
+
+class TrainDensityModel(TrainModelBase):
+    def __init__(self, config: TrainConfig):
+        super().__init__(config)
+
+    @torch.compile
+    def image_loss(self, videos_data_resampled, batch_indices, batch_rays_o, batch_rays_d, depth_size: int, near: float, far: float):
+        batch_time, batch_target_pixels = sample_random_frame(videos_data=videos_data_resampled, batch_indices=batch_indices, device=self.target_device, dtype=self.target_dtype)
+        batch_size_current = batch_rays_d.shape[0]
+
+        t_vals = torch.linspace(0., 1., steps=depth_size, device=self.target_device, dtype=self.target_dtype)
+        t_vals = t_vals.view(1, depth_size)
+        z_vals = near * (1. - t_vals) + far * t_vals
+        z_vals = z_vals.expand(batch_size_current, depth_size)
+
+        mid_vals = .5 * (z_vals[..., 1:] + z_vals[..., :-1])
+        upper_vals = torch.cat([mid_vals, z_vals[..., -1:]], -1)
+        lower_vals = torch.cat([z_vals[..., :1], mid_vals], -1)
+        t_rand = torch.rand(z_vals.shape, device=self.target_device, dtype=self.target_dtype)
+        z_vals = lower_vals + (upper_vals - lower_vals) * t_rand
+
+        batch_dist_vals = z_vals[..., 1:] - z_vals[..., :-1]  # [batch_size_current, N_depths-1]
+        batch_points = batch_rays_o[:, None, :] + batch_rays_d[:, None, :] * z_vals[..., :, None]  # [batch_size_current, N_depths, 3]
+        batch_points_time = torch.cat([batch_points, batch_time.expand(batch_points[..., :1].shape)], dim=-1)
+        batch_points_time_flat = batch_points_time.reshape(-1, 4)
+
+        bbox_mask = insideMask(batch_points_time_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+        batch_points_time_flat_filtered = batch_points_time_flat[bbox_mask]
+
+        hidden = self.encoder_d(batch_points_time_flat_filtered)
+        raw_d = self.model_d(hidden)
+        raw_flat = torch.zeros([batch_size_current * depth_size], device=self.target_device, dtype=self.target_dtype)
+        raw_d_flat = raw_d.view(-1)
+        raw_flat = raw_flat.masked_scatter(bbox_mask, raw_d_flat)
+        raw = raw_flat.reshape(batch_size_current, depth_size, 1)
+
+        dists_cat = torch.cat([batch_dist_vals, torch.tensor([1e10], device=self.target_device).expand(batch_dist_vals[..., :1].shape)], -1)  # [batch_size_current, N_depths]
+        dists_final = dists_cat * torch.norm(batch_rays_d[..., None, :], dim=-1)  # [batch_size_current, N_depths]
+
+        rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
+        noise = 0.
+        alpha = 1. - torch.exp(-torch.nn.functional.relu(raw[..., -1] + noise) * dists_final)
+        weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1), device=self.target_device), 1. - alpha + 1e-10], -1), -1)[:, :-1]
+        rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
+        img_loss = torch.nn.functional.mse_loss(rgb_map, batch_target_pixels)
+
+        return img_loss
+
+    def forward(self, batch_size: int, depth_size: int):
+        self.optimizer_d.zero_grad()
+        batch_indices, batch_rays_o, batch_rays_d = self._next_batch(batch_size)
+        img_loss = self.image_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
+        img_loss.backward()
+        self.optimizer_d.step()
+        self.scheduler_d.step()
+        self.global_step += 1
+        return img_loss
