@@ -36,7 +36,7 @@ def train_velocity(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
             model.load_ckpt(pretrained_ckpt, config.target_device)
         import tqdm
         for _ in tqdm.trange(total_iter):
-            vel_loss, nseloss_fine, proj_loss, min_vel_reg = model.forward(...)
+            vel_loss, nseloss_fine, proj_loss, min_vel_reg = model.forward(config.batch_size)
             writer.add_scalar("Loss/vel_loss", vel_loss, _)
             writer.add_scalar("Loss/nseloss_fine", nseloss_fine, _)
             writer.add_scalar("Loss/proj_loss", proj_loss, _)

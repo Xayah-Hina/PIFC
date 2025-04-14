@@ -195,8 +195,19 @@ class TrainDensityModel(_TrainModelBase):
 
 
 class TrainVelocityModel(_TrainModelBase):
-    def __init__(self, config: TrainConfig):
+    def __init__(self, config: TrainConfig, resx, resy, resz):
         super().__init__(config)
+        self.resx, self.resy, self.resz = resx, resy, resz
+        self.points_generator = None
+
+    def _next_sampled_points(self, batch_size: int):
+        if self.points_generator is None:
+            self.points_generator = sample_bbox(self.resx, self.resy, self.resz, batch_size, True, self.target_device, self.target_dtype, self.s2w, self.s_w2s, self.s_scale, self.s_min, self.s_max)
+        try:
+            return next(self.generator)
+        except StopIteration:
+            self.points_generator = sample_bbox(self.resx, self.resy, self.resz, batch_size, True, self.target_device, self.target_dtype, self.s2w, self.s_w2s, self.s_scale, self.s_min, self.s_max)
+            return next(self.generator)
 
     def velocity_loss(self, batch_points):
         def g(x):
@@ -241,8 +252,9 @@ class TrainVelocityModel(_TrainModelBase):
             skip = True
         return skip, nseloss_fine, proj_loss, min_vel_reg
 
-    def forward(self, sampled_points: torch.Tensor):
+    def forward(self, batch_size: int):
         self.optimizer_v.zero_grad()
+        sampled_points = self._next_sampled_points(batch_size)
         skip, nseloss_fine, proj_loss, min_vel_reg = self.velocity_loss(batch_points=sampled_points)
         vel_loss = 1.0 * nseloss_fine + 1.0 * proj_loss + 10.0 * min_vel_reg
         if not skip:
