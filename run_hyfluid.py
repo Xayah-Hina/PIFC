@@ -123,6 +123,34 @@ if __name__ == "__main__":
             pretrained_ckpt=args.checkpoint
         )
 
+    if args.option == "train_velocity":
+        train_velocity(
+            config=TrainConfig(
+                scene_name=args.scene,
+                target_device=torch.device(args.device),
+                target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
+                batch_size=args.batch_size,
+                depth_size=args.depth_size,
+                ratio=args.ratio,
+            ),
+            total_iter=args.total_iter,
+            pretrained_ckpt=args.checkpoint
+        )
+
+    if args.option == "train_joint":
+        train_joint(
+            config=TrainConfig(
+                scene_name=args.scene,
+                target_device=torch.device(args.device),
+                target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
+                batch_size=args.batch_size,
+                depth_size=args.depth_size,
+                ratio=args.ratio,
+            ),
+            total_iter=args.total_iter,
+            pretrained_ckpt=args.checkpoint
+        )
+
     if args.option == "evaluate_render_frame":
         assert args.checkpoint is not None and args.scene is not None, "Checkpoint and scene name are required for evaluation."
         test_pose = torch.tensor([[0.4863, -0.2431, -0.8393, -0.7697],
