@@ -142,8 +142,8 @@ class TrainDensityModel(TrainModelBase):
         super().__init__(config)
 
     @torch.compile
-    def image_loss(self, videos_data_resampled, batch_indices, batch_rays_o, batch_rays_d, depth_size: int, near: float, far: float):
-        batch_time, batch_target_pixels = sample_random_frame(videos_data=videos_data_resampled, batch_indices=batch_indices, device=self.target_device, dtype=self.target_dtype)
+    def image_loss(self, batch_indices, batch_rays_o, batch_rays_d, depth_size: int, near: float, far: float):
+        batch_time, batch_target_pixels = sample_random_frame(videos_data=self.videos_data_resampled, batch_indices=batch_indices, device=self.target_device, dtype=self.target_dtype)
         batch_size_current = batch_rays_d.shape[0]
 
         t_vals = torch.linspace(0., 1., steps=depth_size, device=self.target_device, dtype=self.target_dtype)
