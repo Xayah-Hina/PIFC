@@ -11,7 +11,7 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
     model = TrainDensityModel(config)
     from torch.utils.tensorboard import SummaryWriter
     from datetime import datetime
-    writer = SummaryWriter(log_dir=f"ckpt/{get_current_function_name()}/{datetime.now().strftime('%m%d%H')}")
+    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{datetime.now().strftime('%m%d%H')}")
     try:
         if pretrained_ckpt:
             model.load_ckpt(pretrained_ckpt, config.target_device)
@@ -30,7 +30,7 @@ def train_velocity(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
     model = TrainVelocityModel(config)
     from torch.utils.tensorboard import SummaryWriter
     from datetime import datetime
-    writer = SummaryWriter(log_dir=f"ckpt/{get_current_function_name()}/{datetime.now().strftime('%m%d%H')}")
+    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{datetime.now().strftime('%m%d%H')}")
     try:
         if pretrained_ckpt:
             model.load_ckpt(pretrained_ckpt, config.target_device)
@@ -52,7 +52,7 @@ def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
     model = TrainJointModel(config)
     from torch.utils.tensorboard import SummaryWriter
     from datetime import datetime
-    writer = SummaryWriter(log_dir=f"ckpt/{get_current_function_name()}/{datetime.now().strftime('%m%d%H')}")
+    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{datetime.now().strftime('%m%d%H')}")
     try:
         if pretrained_ckpt:
             model.load_ckpt(pretrained_ckpt, config.target_device)
@@ -134,7 +134,7 @@ if __name__ == "__main__":
         test_height = 1920
         test_near = 1.1
         test_far = 1.5
-        ratio = 0.5
+        ratio = 1.0
 
         test_focal = test_focal * ratio
         test_width = int(test_width * ratio)
