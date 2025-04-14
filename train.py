@@ -6,11 +6,6 @@ from model.model_hyfluid import *
 
 import torch
 import dataclasses
-import math
-import yaml
-
-
-# import os
 
 
 @dataclasses.dataclass
@@ -28,6 +23,8 @@ class TrainConfig:
     ratio: float
 
     def __post_init__(self):
+        import yaml
+        import os
         scene_info_path = f'data/{self.scene_name}/scene_info.yaml'
         assert os.path.exists(scene_info_path), f"Scene info file not found: {scene_info_path}"
         with open(scene_info_path, 'r') as f:
@@ -71,6 +68,7 @@ class TrainModelBase:
         self.optimizer_v = torch.optim.RAdam([{'params': self.model_v.parameters(), 'weight_decay': 1e-6}, {'params': self.encoder_v.parameters(), 'eps': 1e-15}], lr=0.001, betas=(0.9, 0.99))
 
         target_lr_ratio = 0.001
+        import math
         gamma = math.exp(math.log(target_lr_ratio) / 100000)
         self.scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_d, gamma=gamma)
         self.scheduler_v = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_v, gamma=gamma)
@@ -117,6 +115,7 @@ class TrainModelBase:
                 'config': self.config,
                 'final': False,
             }, path)
+        print(f"Checkpoint saved to {path}")
 
     def load_ckpt(self, path: str, device: torch.device):
         try:
@@ -142,7 +141,7 @@ class TrainDensityModel(TrainModelBase):
         super().__init__(config)
 
     @torch.compile
-    def image_loss(self, batch_indices, batch_rays_o, batch_rays_d, depth_size: int, near: float, far: float):
+    def image_loss(self, batch_indices: torch.Tensor, batch_rays_o: torch.Tensor, batch_rays_d: torch.Tensor, depth_size: int, near: float, far: float):
         batch_time, batch_target_pixels = sample_random_frame(videos_data=self.videos_data_resampled, batch_indices=batch_indices, device=self.target_device, dtype=self.target_dtype)
         batch_size_current = batch_rays_d.shape[0]
 
