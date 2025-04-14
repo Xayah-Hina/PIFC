@@ -26,8 +26,8 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
         writer.close()
 
 
-def train_velocity(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
-    model = TrainVelocityModel(config)
+def train_velocity(config: TrainConfig, resx, resy, resz, total_iter: int, pretrained_ckpt=None):
+    model = TrainVelocityModel(config, resx, resy, resz)
     from torch.utils.tensorboard import SummaryWriter
     from datetime import datetime
     writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{datetime.now().strftime('%m%d%H')}")
@@ -133,6 +133,9 @@ if __name__ == "__main__":
                 depth_size=args.depth_size,
                 ratio=args.ratio,
             ),
+            resx=128,
+            resy=192,
+            resz=128,
             total_iter=args.total_iter,
             pretrained_ckpt=args.checkpoint
         )
