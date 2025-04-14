@@ -88,7 +88,7 @@ class _TrainModelBase:
 
     def save_ckpt(self, directory: str, final: bool):
         from datetime import datetime
-        timestamp = datetime.now().strftime('%m%d%H')
+        timestamp = datetime.now().strftime('%m%d%H%M%S')
         filename = 'ckpt_{}_{}_{:06d}.tar'.format(self.scene_name, timestamp, self.global_step)
         os.makedirs(directory, exist_ok=True)
         path = os.path.join(directory, filename)

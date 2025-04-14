@@ -11,14 +11,15 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
     model = TrainDensityModel(config)
     from torch.utils.tensorboard import SummaryWriter
     from datetime import datetime
-    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{datetime.now().strftime('%m%d%H')}")
+    date = datetime.now().strftime('%m%d%H%M%S')
+    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}")
     try:
         if pretrained_ckpt:
             model.load_ckpt(pretrained_ckpt, config.target_device)
         import tqdm
         for _ in tqdm.trange(total_iter):
             img_loss = model.forward(config.batch_size, config.depth_size)
-            writer.add_scalar("Loss/img_loss", img_loss, _)
+            writer.add_scalar(f"Loss/{date}/img_loss", img_loss, _)
     except Exception as e:
         print(e)
     finally:
@@ -30,17 +31,18 @@ def train_velocity(config: TrainConfig, resx: int, resy: int, resz: int, total_i
     model = TrainVelocityModel(config, resx, resy, resz)
     from torch.utils.tensorboard import SummaryWriter
     from datetime import datetime
-    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{datetime.now().strftime('%m%d%H')}")
+    date = datetime.now().strftime('%m%d%H%M%S')
+    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}")
     try:
         if pretrained_ckpt:
             model.load_ckpt(pretrained_ckpt, config.target_device)
         import tqdm
         for _ in tqdm.trange(total_iter):
             vel_loss, nseloss_fine, proj_loss, min_vel_reg = model.forward(config.batch_size)
-            writer.add_scalar("Loss/vel_loss", vel_loss, _)
-            writer.add_scalar("Loss/nseloss_fine", nseloss_fine, _)
-            writer.add_scalar("Loss/proj_loss", proj_loss, _)
-            writer.add_scalar("Loss/min_vel_reg", min_vel_reg, _)
+            writer.add_scalar(f"Loss/{date}/vel_loss", vel_loss, _)
+            writer.add_scalar(f"Loss/{date}/nseloss_fine", nseloss_fine, _)
+            writer.add_scalar(f"Loss/{date}/proj_loss", proj_loss, _)
+            writer.add_scalar(f"Loss/{date}/min_vel_reg", min_vel_reg, _)
     except Exception as e:
         print(e)
     finally:
@@ -52,18 +54,19 @@ def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
     model = TrainJointModel(config)
     from torch.utils.tensorboard import SummaryWriter
     from datetime import datetime
-    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{datetime.now().strftime('%m%d%H')}")
+    date = datetime.now().strftime('%m%d%H%M%S')
+    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}")
     try:
         if pretrained_ckpt:
             model.load_ckpt(pretrained_ckpt, config.target_device)
         import tqdm
         for _ in tqdm.trange(total_iter):
             vel_loss, nseloss_fine, img_loss, proj_loss, min_vel_reg = model.forward(config.batch_size, config.depth_size)
-            writer.add_scalar("Loss/vel_loss", vel_loss, _)
-            writer.add_scalar("Loss/nseloss_fine", nseloss_fine, _)
-            writer.add_scalar("Loss/img_loss", img_loss, _)
-            writer.add_scalar("Loss/proj_loss", proj_loss, _)
-            writer.add_scalar("Loss/min_vel_reg", min_vel_reg, _)
+            writer.add_scalar(f"Loss/{date}/vel_loss", vel_loss, _)
+            writer.add_scalar(f"Loss/{date}/nseloss_fine", nseloss_fine, _)
+            writer.add_scalar(f"Loss/{date}/img_loss", img_loss, _)
+            writer.add_scalar(f"Loss/{date}/proj_loss", proj_loss, _)
+            writer.add_scalar(f"Loss/{date}/min_vel_reg", min_vel_reg, _)
     except Exception as e:
         print(e)
     finally:
