@@ -18,8 +18,7 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
         import tqdm
         for _ in tqdm.trange(total_iter):
             img_loss = model.forward(config.batch_size, config.depth_size)
-            writer.add_scalar("Loss/train", img_loss, _)
-            tqdm.tqdm.write(f"iter: {model.global_step}, lr_d: {model.scheduler_d.get_last_lr()[0]}, img_loss: {img_loss}")
+            writer.add_scalar("Loss/img_loss", img_loss, _)
     except Exception as e:
         print(e)
     finally:
@@ -38,7 +37,10 @@ def train_velocity(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
         import tqdm
         for _ in tqdm.trange(total_iter):
             vel_loss, nseloss_fine, proj_loss, min_vel_reg = model.forward(...)
-            tqdm.tqdm.write(f"iter: {model.global_step}, lr_d: {model.scheduler_d.get_last_lr()[0]}, lr_v: {model.scheduler_v.get_last_lr()[0]}, vel_loss: {vel_loss}, nseloss_fine: {nseloss_fine}, proj_loss: {proj_loss}, min_vel_reg: {min_vel_reg}")
+            writer.add_scalar("Loss/vel_loss", vel_loss, _)
+            writer.add_scalar("Loss/nseloss_fine", nseloss_fine, _)
+            writer.add_scalar("Loss/proj_loss", proj_loss, _)
+            writer.add_scalar("Loss/min_vel_reg", min_vel_reg, _)
     except Exception as e:
         print(e)
     finally:
@@ -57,7 +59,11 @@ def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
         import tqdm
         for _ in tqdm.trange(total_iter):
             vel_loss, nseloss_fine, img_loss, proj_loss, min_vel_reg = model.forward(config.batch_size, config.depth_size)
-            tqdm.tqdm.write(f"iter: {model.global_step}, lr_d: {model.scheduler_d.get_last_lr()[0]}, lr_v: {model.scheduler_v.get_last_lr()[0]}, vel_loss: {vel_loss}, nseloss_fine: {nseloss_fine}, img_loss: {img_loss}, proj_loss: {proj_loss}, min_vel_reg: {min_vel_reg}")
+            writer.add_scalar("Loss/vel_loss", vel_loss, _)
+            writer.add_scalar("Loss/nseloss_fine", nseloss_fine, _)
+            writer.add_scalar("Loss/img_loss", img_loss, _)
+            writer.add_scalar("Loss/proj_loss", proj_loss, _)
+            writer.add_scalar("Loss/min_vel_reg", min_vel_reg, _)
     except Exception as e:
         print(e)
     finally:
