@@ -33,16 +33,15 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
 
 
 def train_velocity(config: TrainConfig, pretrain_density: int, resx: int, resy: int, resz: int, total_iter: int, pretrained_ckpt=None):
-    final_ckpt_path = train_density_only(config, pretrain_density, pretrained_ckpt=pretrained_ckpt)
-
     model = TrainVelocityModel(config, resx, resy, resz)
+    if pretrained_ckpt is None:
+        pretrained_ckpt = train_density_only(config, pretrain_density, pretrained_ckpt=None)
+    model.load_ckpt(pretrained_ckpt, config.target_device)
     from torch.utils.tensorboard import SummaryWriter
     from datetime import datetime
     date = datetime.now().strftime('%m%d%H%M%S')
     writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}")
     try:
-        if final_ckpt_path:
-            model.load_ckpt(final_ckpt_path, config.target_device)
         import tqdm
         for _ in tqdm.trange(total_iter):
             vel_loss, nseloss_fine, proj_loss, min_vel_reg = model.forward(config.batch_size)
