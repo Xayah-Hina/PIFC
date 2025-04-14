@@ -7,8 +7,7 @@ from model.model_hyfluid import *
 import torch
 import dataclasses
 import math
-import typing
-import tqdm
+import yaml
 
 
 # import os
@@ -16,46 +15,52 @@ import tqdm
 
 @dataclasses.dataclass
 class TrainConfig:
+    # datasets
+    scene_name: str
+
     # general parameters
     target_device: torch.device
     target_dtype: torch.dtype
 
-    # datasets
-    dataset_name: str
-    training_videos: typing.List[str]
-    camera_calibrations: typing.List[str]
-
     # training parameters
     batch_size: int
+    depth_size: int
     ratio: float
 
-    # spatial parameters
-    voxel_transform: torch.Tensor
-    voxel_scale: torch.Tensor
-
     def __post_init__(self):
-        self.voxel_transform = self.voxel_transform.to(self.target_device, dtype=self.target_dtype)
-        self.voxel_scale = self.voxel_scale.to(self.target_device, dtype=self.target_dtype)
+        scene_info_path = f'data/{self.scene_name}/scene_info.yaml'
+        assert os.path.exists(scene_info_path), f"Scene info file not found: {scene_info_path}"
+        with open(scene_info_path, 'r') as f:
+            scene_info = yaml.safe_load(f)
+            self.training_videos = scene_info['training_videos']
+            self.camera_calibrations = scene_info['camera_calibrations']
+            self.voxel_transform = torch.tensor(scene_info['voxel_transform'], device=self.target_device, dtype=self.target_dtype)
+            self.voxel_scale = torch.tensor(scene_info['voxel_scale'], device=self.target_device, dtype=self.target_dtype)
+            self.s_min = torch.tensor(scene_info['s_min'], device=self.target_device, dtype=self.target_dtype)
+            self.s_max = torch.tensor(scene_info['s_max'], device=self.target_device, dtype=self.target_dtype)
         self.s_w2s = torch.inverse(self.voxel_transform).expand([4, 4])
         self.s2w = torch.inverse(self.s_w2s)
         self.s_scale = self.voxel_scale.expand([3])
-        self.s_min = torch.tensor([0.0, 0.0, 0.0], device=self.target_device, dtype=self.target_dtype)
-        self.s_max = torch.tensor([1.0, 1.0, 1.0], device=self.target_device, dtype=self.target_dtype)
 
 
 class TrainModelBase:
     def __init__(self, config: TrainConfig):
+        self._reinitialize(config)
+
+    def _reinitialize(self, config):
         self._load_model(config.target_device)
         self._load_dataset(config.training_videos, config.camera_calibrations, config.ratio, config.target_device, config.target_dtype)
 
-        self.config = config
-        self.target_device = config.target_device  # alias for self.config.target_device
-        self.target_dtype = config.target_dtype  # alias for self.config.target_dtype
+        self.target_device = config.target_device
+        self.target_dtype = config.target_dtype
+        self.scene_name = config.scene_name
         self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = config.s_w2s, config.s2w, config.s_scale, config.s_min, config.s_max
 
         self.generator = None
         self.videos_data_resampled = None
         self.global_step = 0
+
+        self.config = config  # Don't use is unless save_ckpt
 
     def _load_model(self, target_device: torch.device):
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
@@ -87,7 +92,7 @@ class TrainModelBase:
     def save_ckpt(self, directory: str, final: bool):
         from datetime import datetime
         timestamp = datetime.now().strftime('%m%d%H')
-        filename = 'ckpt_{}_{}_{:06d}.tar'.format(self.config.dataset_name, timestamp, self.global_step)
+        filename = 'ckpt_{}_{}_{:06d}.tar'.format(self.scene_name, timestamp, self.global_step)
         os.makedirs(directory, exist_ok=True)
         path = os.path.join(directory, filename)
         if final:
@@ -98,6 +103,7 @@ class TrainModelBase:
                 'encoder_v': self.encoder_v.state_dict(),
                 'global_step': self.global_step,
                 'config': self.config,
+                'final': True,
             }, path)
         else:
             torch.save({
@@ -109,7 +115,26 @@ class TrainModelBase:
                 'optimizer_v': self.optimizer_v.state_dict(),
                 'global_step': self.global_step,
                 'config': self.config,
+                'final': False,
             }, path)
+
+    def load_ckpt(self, path: str, device: torch.device):
+        try:
+            checkpoint = torch.load(path, map_location=device)
+            config = checkpoint['config']
+            assert checkpoint['final'] == False, "Don't load final checkpoint in a Train Model, use it in a Evaluation Model."
+            self._reinitialize(config)
+            self.model_d.load_state_dict(checkpoint['model_d'])
+            self.encoder_d.load_state_dict(checkpoint['encoder_d'])
+            self.optimizer_d.load_state_dict(checkpoint['optimizer_d'])
+            self.model_v.load_state_dict(checkpoint['model_v'])
+            self.encoder_v.load_state_dict(checkpoint['encoder_v'])
+            self.optimizer_v.load_state_dict(checkpoint['optimizer_v'])
+            self.global_step = checkpoint['global_step']
+            print(f"loaded checkpoint from {path}")
+            print("Model loaded successfully!")
+        except Exception as e:
+            print(f"Error loading model: {e}")
 
 
 class TrainDensityModel(TrainModelBase):
