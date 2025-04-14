@@ -41,7 +41,7 @@ def train_velocity(config: TrainConfig, pretrain_density: int, resx: int, resy: 
     date = datetime.now().strftime('%m%d%H%M%S')
     writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}")
     try:
-        if pretrained_ckpt:
+        if final_ckpt_path:
             model.load_ckpt(final_ckpt_path, config.target_device)
         import tqdm
         for _ in tqdm.trange(total_iter):
