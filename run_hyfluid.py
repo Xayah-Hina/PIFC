@@ -26,11 +26,15 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
     except Exception as e:
         print(e)
     finally:
-        model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
+        final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
+        model.save_ckpt(final_ckpt_path, final=False)
         writer.close()
+        return final_ckpt_path
 
 
-def train_velocity(config: TrainConfig, resx: int, resy: int, resz: int, total_iter: int, pretrained_ckpt=None):
+def train_velocity(config: TrainConfig, pretrain_density: int, resx: int, resy: int, resz: int, total_iter: int, pretrained_ckpt=None):
+    final_ckpt_path = train_density_only(config, pretrain_density, pretrained_ckpt=pretrained_ckpt)
+
     model = TrainVelocityModel(config, resx, resy, resz)
     from torch.utils.tensorboard import SummaryWriter
     from datetime import datetime
@@ -38,7 +42,7 @@ def train_velocity(config: TrainConfig, resx: int, resy: int, resz: int, total_i
     writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}")
     try:
         if pretrained_ckpt:
-            model.load_ckpt(pretrained_ckpt, config.target_device)
+            model.load_ckpt(final_ckpt_path, config.target_device)
         import tqdm
         for _ in tqdm.trange(total_iter):
             vel_loss, nseloss_fine, proj_loss, min_vel_reg = model.forward(config.batch_size)
@@ -52,8 +56,10 @@ def train_velocity(config: TrainConfig, resx: int, resy: int, resz: int, total_i
     except Exception as e:
         print(e)
     finally:
-        model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
+        final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
+        model.save_ckpt(final_ckpt_path, final=False)
         writer.close()
+        return final_ckpt_path
 
 
 def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
@@ -79,8 +85,10 @@ def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
     except Exception as e:
         print(e)
     finally:
-        model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
+        final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
+        model.save_ckpt(final_ckpt_path, final=False)
         writer.close()
+        return final_ckpt_path
 
 
 def evaluate_render_frame(config: EvaluationConfig, frame, pose, focal, width, height, depth_size, near, far):
@@ -174,6 +182,7 @@ if __name__ == "__main__":
                 use_mid_ckpts=args.use_mid_ckpts,
                 mid_ckpts_iters=args.mid_ckpts_iters,
             ),
+            pretrain_density=100000,
             resx=args.resx,
             resy=args.resy,
             resz=args.resz,
