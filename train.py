@@ -1,6 +1,5 @@
 from lib.dataset import *
 from lib.frustum import *
-# from lib.solver import *
 from model.encoder_hyfluid import *
 from model.model_hyfluid import *
 
@@ -195,7 +194,7 @@ class TrainDensityModel(_TrainModelBase):
 
 
 class TrainVelocityModel(_TrainModelBase):
-    def __init__(self, config: TrainConfig, resx, resy, resz):
+    def __init__(self, config: TrainConfig, resx: int, resy: int, resz: int):
         super().__init__(config)
         self.resx, self.resy, self.resz = resx, resy, resz
         self.points_generator = None

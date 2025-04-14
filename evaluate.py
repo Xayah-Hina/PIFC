@@ -1,4 +1,5 @@
 from lib.frustum import *
+from lib.solver import *
 from model.encoder_hyfluid import *
 from model.model_hyfluid import *
 import torch
@@ -33,7 +34,7 @@ class EvaluationConfig:
         self.s_scale = self.voxel_scale.expand([3])
 
 
-class EvaluationModelBase:
+class _EvaluationModelBase:
     def __init__(self, config):
         self._load_model(config.target_device)
         self.load_ckpt(config.pretrained_ckpt, config.target_device)
@@ -61,7 +62,7 @@ class EvaluationModelBase:
             print(f"Error loading model: {e}")
 
 
-class EvaluationRenderFrame(EvaluationModelBase):
+class EvaluationRenderFrame(_EvaluationModelBase):
     def __init__(self, config: EvaluationConfig):
         super().__init__(config)
 
@@ -119,3 +120,54 @@ class EvaluationRenderFrame(EvaluationModelBase):
 
             final_rgb_map = torch.cat(final_rgb_map_list, dim=0).reshape(height, width, 3)
             return final_rgb_map
+
+
+class EvaluationResimulation(_EvaluationModelBase):
+    def __init__(self, config: EvaluationConfig, resx: int, resy: int, resz: int):
+        super().__init__(config)
+
+        xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device, dtype=self.target_dtype), torch.linspace(0, 1, resy, device=self.target_device, dtype=self.target_dtype), torch.linspace(0, 1, resz, device=self.target_device, dtype=self.target_dtype)], indexing='ij')
+        self.coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
+        self.coord_3d_world = sim2world(self.coord_3d_sim, self.s2w, self.s_scale)
+        self.bbox_mask = insideMask(self.coord_3d_world, self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+        self.bbox_mask_flat = self.bbox_mask.flatten()
+
+        self.resx, self.resy, self.resz = resx, resy, resz
+
+    @torch.compile
+    def sample_density_grid(self, frame):
+        with torch.no_grad():
+            input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
+            raw_d_flat_list = []
+            batch_size = 64 * 64 * 64
+            for i in range(0, input_xyzt_flat.shape[0], batch_size):
+                input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
+                raw_d_flat_batch = self.model_d(self.encoder_d(input_xyzt_flat_batch))
+                raw_d_flat_list.append(raw_d_flat_batch)
+            raw_d_flat = torch.cat(raw_d_flat_list, dim=0)
+            raw_d_flat[~self.bbox_mask_flat] = 0.0
+            raw_d = raw_d_flat.reshape(self.resx, self.resy, self.resz, 1)
+            return raw_d
+
+    @torch.compile
+    def sample_velocity_grid(self, frame):
+        with torch.no_grad():
+            input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
+            raw_vel_flat_list = []
+            batch_size = 64 * 64 * 64
+            for i in range(0, input_xyzt_flat.shape[0], batch_size):
+                input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
+                raw_vel_flat_batch, _ = self.model_v(self.encoder_v(input_xyzt_flat_batch))
+                raw_vel_flat_list.append(raw_vel_flat_batch)
+            raw_vel_flat = torch.cat(raw_vel_flat_list, dim=0)
+            raw_vel_flat[~self.bbox_mask_flat] = 0.0
+            raw_vel = raw_vel_flat.reshape(self.resx, self.resy, self.resz, 3)
+            return raw_vel
+
+    @torch.compile
+    def advect_density(self, den, vel, source, dt, mask_to_sim):
+        with torch.no_grad():
+            den = advect_maccormack(den, vel, self.coord_3d_sim, dt)
+            den[~mask_to_sim] = source[~mask_to_sim]
+            den[~self.bbox_mask] *= 0.
+            return den

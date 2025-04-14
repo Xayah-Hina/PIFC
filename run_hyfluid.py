@@ -26,7 +26,7 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
         writer.close()
 
 
-def train_velocity(config: TrainConfig, resx, resy, resz, total_iter: int, pretrained_ckpt=None):
+def train_velocity(config: TrainConfig, resx: int, resy: int, resz: int, total_iter: int, pretrained_ckpt=None):
     model = TrainVelocityModel(config, resx, resy, resz)
     from torch.utils.tensorboard import SummaryWriter
     from datetime import datetime
@@ -92,13 +92,33 @@ def evaluate_render_frame(config: EvaluationConfig, frame, pose, focal, width, h
             raise ValueError("frame should be an integer or a list of integers.")
 
 
+def evaluate_resimulation(config: EvaluationConfig, resx: int, resy: int, resz: int):
+    with torch.no_grad():
+        model = EvaluationResimulation(config, resx, resy, resz)
+        dt = 1.0 / 119.0
+        source_height = 0.15
+        den = model.sample_density_grid(0)
+        source = den
+
+        import tqdm
+        for step in tqdm.trange(120):
+            if step > 0:
+                vel = model.sample_velocity_grid(step - 1)
+                vel_sim_confined = world2sim_rot(vel, model.s_w2s, model.s_scale)
+                source = model.sample_density_grid(step)
+                den = model.advect_density(den, vel_sim_confined, source, dt, model.coord_3d_sim[..., 1] > source_height)
+            os.makedirs(f'ckpt/{config.scene_name}/resimulation', exist_ok=True)
+            np.save(os.path.join(f'ckpt/{config.scene_name}/resimulation', f'density_advected_{step + 1:03d}.npy'), den.cpu().numpy())
+            np.save(os.path.join(f'ckpt/{config.scene_name}/resimulation', f'density_original_{step + 1:03d}.npy'), source.cpu().numpy())
+
+
 if __name__ == "__main__":
     print("==================== Operation starting. ====================")
 
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
-    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_joint', 'evaluate_render_frame'], required=True, help="Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_joint', 'evaluate_render_frame', 'evaluate_resimulation'], required=True, help="Choose the operation to execute.")
     parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="Data type to use.")
     parser.add_argument('--scene', type=str, default="hyfluid", help="Scene to run.")
@@ -107,6 +127,9 @@ if __name__ == "__main__":
     parser.add_argument('--ratio', type=float, default=0.5, help="Ratio of resolution resampling.")
     parser.add_argument('--total_iter', type=int, default=10000, help="Total iterations for training.")
     parser.add_argument('--checkpoint', type=str, default=None, help="Checkpoint to load.")
+    parser.add_argument('--resx', type=int, default=128, help="Resolution in x direction.")
+    parser.add_argument('--resy', type=int, default=192, help="Resolution in y direction.")
+    parser.add_argument('--resz', type=int, default=128, help="Resolution in z direction.")
     args = parser.parse_args()
 
     if args.option == "train_density_only":
@@ -120,7 +143,7 @@ if __name__ == "__main__":
                 ratio=args.ratio,
             ),
             total_iter=args.total_iter,
-            pretrained_ckpt=args.checkpoint
+            pretrained_ckpt=args.checkpoint,
         )
 
     if args.option == "train_velocity":
@@ -133,11 +156,11 @@ if __name__ == "__main__":
                 depth_size=args.depth_size,
                 ratio=args.ratio,
             ),
-            resx=128,
-            resy=192,
-            resz=128,
+            resx=args.resx,
+            resy=args.resy,
+            resz=args.resz,
             total_iter=args.total_iter,
-            pretrained_ckpt=args.checkpoint
+            pretrained_ckpt=args.checkpoint,
         )
 
     if args.option == "train_joint":
@@ -151,7 +174,7 @@ if __name__ == "__main__":
                 ratio=args.ratio,
             ),
             total_iter=args.total_iter,
-            pretrained_ckpt=args.checkpoint
+            pretrained_ckpt=args.checkpoint,
         )
 
     if args.option == "evaluate_render_frame":
@@ -185,7 +208,21 @@ if __name__ == "__main__":
             height=test_height,
             depth_size=args.depth_size,
             near=test_near,
-            far=test_far
+            far=test_far,
+        )
+
+    if args.option == "evaluate_resimulation":
+        assert args.checkpoint is not None and args.scene is not None, "Checkpoint and scene name are required for evaluation."
+        evaluate_resimulation(
+            config=EvaluationConfig(
+                scene_name=args.scene,
+                pretrained_ckpt=args.checkpoint,
+                target_device=torch.device(args.device),
+                target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
+            ),
+            resx=args.resx,
+            resy=args.resy,
+            resz=args.resz,
         )
 
     print("==================== Operation completed. ====================")
