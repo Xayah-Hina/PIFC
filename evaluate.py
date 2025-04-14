@@ -50,7 +50,7 @@ class EvaluationModelBase:
 
     def load_ckpt(self, path: str, device: torch.device):
         try:
-            checkpoint = torch.load(path, map_location=device)
+            checkpoint = torch.load(path, map_location=device, weights_only=False)
             self.model_d.load_state_dict(checkpoint['model_d'])
             self.encoder_d.load_state_dict(checkpoint['encoder_d'])
             self.model_v.load_state_dict(checkpoint['model_v'])
