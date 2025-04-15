@@ -62,9 +62,9 @@ def train_velocity(config: TrainConfig, pretrain_density: int, resx: int, resy: 
         print(e)
     finally:
         final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
-        model.save_ckpt(final_ckpt_path, final=False)
+        saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
         writer.close()
-        return final_ckpt_path
+        return saved_ckpt
 
 
 def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):

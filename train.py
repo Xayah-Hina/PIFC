@@ -120,6 +120,7 @@ class _TrainModelBase:
                 'final': False,
             }, path)
         print(f"Checkpoint saved to {path}")
+        return path
 
     def load_ckpt(self, path: str, device: torch.device):
         try:
