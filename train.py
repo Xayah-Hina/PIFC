@@ -262,11 +262,11 @@ class TrainVelocityModel(_TrainModelBase):
         sampled_points = self._next_sampled_points(batch_size)
         skip, nseloss_fine, proj_loss, min_vel_reg = self.velocity_loss(batch_points=sampled_points)
         vel_loss = 1.0 * nseloss_fine + 1.0 * proj_loss + 10.0 * min_vel_reg
-        if not skip:
-            vel_loss.backward()
-            self.optimizer_v.step()
-            self.scheduler_v.step()
-            self.global_step += 1
+        # if not skip: # don't skip
+        vel_loss.backward()
+        self.optimizer_v.step()
+        self.scheduler_v.step()
+        self.global_step += 1
         return vel_loss, nseloss_fine, proj_loss, min_vel_reg
 
 
@@ -352,11 +352,11 @@ class TrainJointModel(_TrainModelBase):
         batch_indices, batch_rays_o, batch_rays_d = self._next_batch(batch_size)
         skip, nseloss_fine, img_loss, proj_loss, min_vel_reg = self.joint_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
         vel_loss = 10000 * img_loss + 1.0 * nseloss_fine + 1.0 * proj_loss + 10.0 * min_vel_reg
-        if not skip:
-            vel_loss.backward()
-            self.optimizer_d.step()
-            self.optimizer_v.step()
-            self.scheduler_d.step()
-            self.scheduler_v.step()
-            self.global_step += 1
+        # if not skip: # don't skip
+        vel_loss.backward()
+        self.optimizer_d.step()
+        self.optimizer_v.step()
+        self.scheduler_d.step()
+        self.scheduler_v.step()
+        self.global_step += 1
         return vel_loss, nseloss_fine, img_loss, proj_loss, min_vel_reg
