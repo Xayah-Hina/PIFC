@@ -140,25 +140,13 @@ def evaluate_resimulation(config: EvaluationConfig, resx: int, resy: int, resz: 
             np.save(os.path.join(f'ckpt/{config.scene_name}/resimulation', f'density_original_{step + 1:03d}.npy'), source.cpu().numpy())
 
 
-def evaluate_export_fields(config: EvaluationConfig, resx: int, resy: int, resz: int):
-    with torch.no_grad():
-        model = EvaluationResimulation(config, resx, resy, resz)
-        import tqdm
-        for frame in tqdm.trange(120):
-            den = model.sample_density_grid(frame)
-            vel = model.sample_velocity_grid(frame)
-            os.makedirs(f'ckpt/{config.scene_name}/export_fields', exist_ok=True)
-            np.save(os.path.join(f'ckpt/{config.scene_name}/export_fields', f'density_{frame:03d}.npy'), den.cpu().numpy())
-            np.save(os.path.join(f'ckpt/{config.scene_name}/export_fields', f'velocity_{frame:03d}.npy'), vel.cpu().numpy())
-
-
 if __name__ == "__main__":
     print("==================== Operation starting. ====================")
 
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
-    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_joint', 'evaluate_render_frame', 'evaluate_resimulation', 'evaluate_export_fields'], required=True, help="Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_joint', 'evaluate_render_frame', 'evaluate_resimulation', 'export_density_field'], required=True, help="Choose the operation to execute.")
     parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="Data type to use.")
     parser.add_argument('--scene', type=str, default="hyfluid", help="Scene to run.")
@@ -271,23 +259,46 @@ if __name__ == "__main__":
             far=test_far,
         )
 
+    ##### Houdini Evaluation #####
+    import lib.houdini
+
     if args.option == "evaluate_resimulation":
         assert args.checkpoint is not None and args.scene is not None, "Checkpoint and scene name are required for evaluation."
-        evaluate_resimulation(
-            config=EvaluationConfig(
-                scene_name=args.scene,
-                pretrained_ckpt=args.checkpoint,
-                target_device=torch.device(args.device),
-                target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
-            ),
-            resx=args.resx,
-            resy=args.resy,
-            resz=args.resz,
-        )
+        with torch.no_grad():
+            model = EvaluationResimulation(
+                config=EvaluationConfig(
+                    scene_name=args.scene,
+                    pretrained_ckpt=args.checkpoint,
+                    target_device=torch.device(args.device),
+                    target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
+                ),
+                resx=args.resx,
+                resy=args.resy,
+                resz=args.resz,
+            )
+            dt = 1.0 / 119.0
+            source_height = 0.15
+            den = model.sample_density_grid(0)
+            source = den
 
-    if args.option == "evaluate_export_fields":
+            import tqdm
+
+            for step in tqdm.trange(120):
+                if step > 0:
+                    vel = model.sample_velocity_grid(step - 1)
+                    vel_sim_confined = world2sim_rot(vel, model.s_w2s, model.s_scale)
+                    source = model.sample_density_grid(step)
+                    den = model.advect_density(den, vel_sim_confined, source, dt, model.coord_3d_sim[..., 1] > source_height)
+                lib.houdini.export_density_field(
+                    den,
+                    save_path="ckpt/resimulation",
+                    surname=f"density_{step:03d}",
+                )
+
+    if args.option == "export_density_field":
         assert args.checkpoint is not None and args.scene is not None, "Checkpoint and scene name are required for evaluation."
-        evaluate_export_fields(
+
+        model = EvaluationResimulation(
             config=EvaluationConfig(
                 scene_name=args.scene,
                 pretrained_ckpt=args.checkpoint,
@@ -298,5 +309,10 @@ if __name__ == "__main__":
             resy=args.resy,
             resz=args.resz,
         )
-
+        frame=110
+        lib.houdini.export_density_field(
+            den=model.sample_density_grid(frame=frame),
+            save_path="ckpt/export",
+            surname=f"density_{frame:03d}",
+        )
     print("==================== Operation completed. ====================")
