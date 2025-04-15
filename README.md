@@ -1,5 +1,13 @@
 # Physics Informed Fluid Control
 
+## Environment Setup
+```shell
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+python -m pip install tensorboard tqdm pyyaml av
+python -m pip install https://github.com/woct0rdho/triton-windows/releases/download/v3.2.0-windows.post10/triton-3.2.0-cp311-cp311-win_amd64.whl
+```
+
 ## Checkpoints
 
 ### Scene HyFluid
