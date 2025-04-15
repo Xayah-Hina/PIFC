@@ -216,17 +216,28 @@ if __name__ == "__main__":
 
     if args.option == "evaluate_render_frame":
         assert args.checkpoint is not None and args.scene is not None, "Checkpoint and scene name are required for evaluation."
-        test_pose = torch.tensor([[0.4863, -0.2431, -0.8393, -0.7697],
-                                  [-0.0189, 0.9574, -0.2882, 0.0132],
-                                  [0.8736, 0.1560, 0.4610, 0.3250],
-                                  [0.0000, 0.0000, 0.0000, 1.0000]], device=torch.device(args.device), dtype=torch.float32)
-        test_focal = torch.tensor(2613.7634, device=torch.device(args.device), dtype=torch.float32)
-        test_width = 1080
-        test_height = 1920
-        test_near = 1.1
-        test_far = 1.5
-        ratio = 1.0
+        if args.scene == "hyfluid":
+            test_pose = torch.tensor([[0.4863, -0.2431, -0.8393, -0.7697],
+                                      [-0.0189, 0.9574, -0.2882, 0.0132],
+                                      [0.8736, 0.1560, 0.4610, 0.3250],
+                                      [0.0000, 0.0000, 0.0000, 1.0000]], device=torch.device(args.device), dtype=torch.float32)
+            test_focal = torch.tensor(2613.7634, device=torch.device(args.device), dtype=torch.float32)
+            test_width = 1080
+            test_height = 1920
+            test_near = 1.1
+            test_far = 1.5
+        else:
+            test_pose = torch.tensor([[-6.5174e-01, 7.3241e-02, 7.5490e-01, 3.5361e+00],
+                                      [-6.9389e-18, 9.9533e-01, -9.6567e-02, 1.9000e+00],
+                                      [-7.5844e-01, -6.2937e-02, -6.4869e-01, -2.6511e+00],
+                                      [0.0000e+00, 0.0000e+00, 0.0000e+00, 1.0000e+00]], device=torch.device(args.device), dtype=torch.float32)
+            test_focal = torch.tensor(1303.6753, device=torch.device(args.device), dtype=torch.float32)
+            test_width = 1080
+            test_height = 1920
+            test_near = 2.5
+            test_far = 5.4
 
+        ratio = 1.0
         test_focal = test_focal * ratio
         test_width = int(test_width * ratio)
         test_height = int(test_height * ratio)
