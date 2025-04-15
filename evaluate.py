@@ -171,3 +171,49 @@ class EvaluationResimulation(_EvaluationModelBase):
             den[~mask_to_sim] = source[~mask_to_sim]
             den[~self.bbox_mask] *= 0.
             return den
+
+
+class EvaluationSpatialState(_EvaluationModelBase):
+    def __init__(self, config: EvaluationConfig, resx: int, resy: int, resz: int):
+        super().__init__(config)
+
+        xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=self.target_device, dtype=self.target_dtype), torch.linspace(0, 1, resy, device=self.target_device, dtype=self.target_dtype), torch.linspace(0, 1, resz, device=self.target_device, dtype=self.target_dtype)], indexing='ij')
+        self.coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
+        self.coord_3d_world = sim2world(self.coord_3d_sim, self.s2w, self.s_scale)
+        self.bbox_mask = insideMask(self.coord_3d_world, self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+        self.bbox_mask_flat = self.bbox_mask.flatten()
+
+        self.resx, self.resy, self.resz = resx, resy, resz
+
+    @torch.compile
+    def sample_valid_density_grid(self, frame):
+        with torch.no_grad():
+            input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
+            raw_d_flat_list = []
+            batch_size = 64 * 64 * 64
+            for i in range(0, input_xyzt_flat.shape[0], batch_size):
+                input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
+                raw_d_flat_batch = self.model_d(self.encoder_d(input_xyzt_flat_batch))
+                raw_d_flat_list.append(raw_d_flat_batch)
+            raw_d_flat = torch.cat(raw_d_flat_list, dim=0)
+            raw_d_valid = raw_d_flat[self.bbox_mask_flat]
+            return raw_d_valid
+
+    def plot_density_distribution_histogram(self, frame, bins):
+        import matplotlib.pyplot as plt
+        with torch.no_grad():
+            density_tensor = self.sample_valid_density_grid(frame)
+            density_flat = density_tensor.view(-1).cpu().numpy()
+
+            plt.figure(figsize=(8, 4))
+            plt.hist(density_flat, bins=bins, edgecolor='black')
+            plt.title("Density Distribution Histogram")
+            plt.xlabel("Density Value")
+            plt.ylabel("Frequency")
+            plt.grid(True)
+            plt.tight_layout()
+            plt.show()
+
+            print(f"max density: {density_flat.max()}, min density: {density_flat.min()}, mean density: {density_flat.mean()}, std density: {density_flat.std()}")
+
+            return density_flat

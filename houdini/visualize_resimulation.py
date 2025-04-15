@@ -3,11 +3,11 @@ import os
 import glob
 import numpy as np
 
-input_dir = "ckpt/hyfluid/export_fields"
-output_dir = "ckpt/hyfluid/export_fields"
+input_dir = "ckpt/hyfluid/resimulation"
+output_dir = "ckpt/hyfluid/resimulation"
 os.makedirs(output_dir, exist_ok=True)
 
-npy_files = sorted(glob.glob(os.path.join(input_dir, "density_*.npy")))
+npy_files = sorted(glob.glob(os.path.join(input_dir, "density_advected_*.npy")))
 
 print(f"Find {len(npy_files)} .npy files")
 
@@ -24,6 +24,6 @@ for npy_path in npy_files:
     flat = data.flatten().tolist()
     vol.setAllVoxels(flat)
 
-    output_path = os.path.join(output_dir, f"density_{frame_str}.bgeo.sc")
+    output_path = os.path.join(output_dir, f"density_advected_{frame_str}.bgeo.sc")
     geo.saveToFile(output_path)
     print(f"Save {output_path}")
