@@ -158,6 +158,7 @@ if __name__ == "__main__":
     parser.add_argument('--resx', type=int, default=128, help="Resolution in x direction.")
     parser.add_argument('--resy', type=int, default=192, help="Resolution in y direction.")
     parser.add_argument('--resz', type=int, default=128, help="Resolution in z direction.")
+    parser.add_argument('--frame', type=int, default=-1, help="Frame to render.")
     parser.add_argument('--use_mid_ckpts', type=bool, default=False, help="Use mid-ckpts iteration.")
     parser.add_argument('--mid_ckpts_iters', type=int, default=2000, help="Mid-ckpts iteration.")
     args = parser.parse_args()
@@ -261,6 +262,7 @@ if __name__ == "__main__":
 
     ##### Houdini Evaluation #####
     import lib.houdini
+    import tqdm
 
     if args.option == "evaluate_resimulation":
         assert args.checkpoint is not None and args.scene is not None, "Checkpoint and scene name are required for evaluation."
@@ -280,9 +282,6 @@ if __name__ == "__main__":
             source_height = 0.15
             den = model.sample_density_grid(0)
             source = den
-
-            import tqdm
-
             for step in tqdm.trange(120):
                 if step > 0:
                     vel = model.sample_velocity_grid(step - 1)
@@ -297,7 +296,6 @@ if __name__ == "__main__":
 
     if args.option == "export_density_field":
         assert args.checkpoint is not None and args.scene is not None, "Checkpoint and scene name are required for evaluation."
-
         model = EvaluationResimulation(
             config=EvaluationConfig(
                 scene_name=args.scene,
@@ -309,10 +307,18 @@ if __name__ == "__main__":
             resy=args.resy,
             resz=args.resz,
         )
-        frame=110
-        lib.houdini.export_density_field(
-            den=model.sample_density_grid(frame=frame),
-            save_path="ckpt/export",
-            surname=f"density_{frame:03d}",
-        )
+        frame = args.frame
+        if frame == -1:
+            for _ in tqdm.trange(120):
+                lib.houdini.export_density_field(
+                    den=model.sample_density_grid(frame=_+1),
+                    save_path="ckpt/export",
+                    surname=f"density_{_+1:03d}",
+                )
+        else:
+            lib.houdini.export_density_field(
+                den=model.sample_density_grid(frame=frame),
+                save_path="ckpt/export",
+                surname=f"density_{frame:03d}",
+            )
     print("==================== Operation completed. ====================")
