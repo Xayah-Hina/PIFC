@@ -123,9 +123,10 @@ class _TrainModelBase:
     def load_ckpt(self, path: str, device: torch.device):
         try:
             checkpoint = torch.load(path, map_location=device, weights_only=False)
-            config = checkpoint['config']
             assert checkpoint['final'] == False, "Don't load final checkpoint in a Train Model, use it in a Evaluation Model."
-            self._reinitialize(config)
+            # config = checkpoint['config']
+            # config.target_device = device
+            # self._reinitialize(config)
             self.model_d.load_state_dict(checkpoint['model_d'])
             self.encoder_d.load_state_dict(checkpoint['encoder_d'])
             self.optimizer_d.load_state_dict(checkpoint['optimizer_d'])
