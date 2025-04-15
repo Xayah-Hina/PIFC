@@ -21,6 +21,8 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
         for _ in tqdm.trange(total_iter):
             img_loss = model.forward(config.batch_size, config.depth_size)
             writer.add_scalar(f"Loss/{date}/{device_str}/img_loss", img_loss, _)
+            writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_d", model.scheduler_d.get_last_lr()[0], _)
+            writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_v", model.scheduler_v.get_last_lr()[0], _)
 
             if config.use_mid_ckpts and model.global_step % config.mid_ckpts_iters == 0:
                 model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
@@ -51,6 +53,8 @@ def train_velocity(config: TrainConfig, pretrain_density: int, resx: int, resy: 
             writer.add_scalar(f"Loss/{date}/{device_str}/nseloss_fine", nseloss_fine, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/proj_loss", proj_loss, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/min_vel_reg", min_vel_reg, _)
+            writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_d", model.scheduler_d.get_last_lr()[0], _)
+            writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_v", model.scheduler_v.get_last_lr()[0], _)
 
             if config.use_mid_ckpts and model.global_step % config.mid_ckpts_iters == 0:
                 model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
@@ -81,6 +85,8 @@ def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
             writer.add_scalar(f"Loss/{date}/{device_str}/img_loss", img_loss, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/proj_loss", proj_loss, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/min_vel_reg", min_vel_reg, _)
+            writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_d", model.scheduler_d.get_last_lr()[0], _)
+            writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_v", model.scheduler_v.get_last_lr()[0], _)
 
             if config.use_mid_ckpts and model.global_step % config.mid_ckpts_iters == 0:
                 model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
