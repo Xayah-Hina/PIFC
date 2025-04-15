@@ -12,14 +12,15 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
     from torch.utils.tensorboard import SummaryWriter
     from datetime import datetime
     date = datetime.now().strftime('%m%d%H%M%S')
-    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}")
+    device_str = f"{config.target_device.type}{config.target_device.index if config.target_device.index is not None else ''}"
+    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}/{device_str}")
     try:
         if pretrained_ckpt:
             model.load_ckpt(pretrained_ckpt, config.target_device)
         import tqdm
         for _ in tqdm.trange(total_iter):
             img_loss = model.forward(config.batch_size, config.depth_size)
-            writer.add_scalar(f"Loss/{date}/img_loss", img_loss, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/img_loss", img_loss, _)
 
             if config.use_mid_ckpts and model.global_step % config.mid_ckpts_iters == 0:
                 model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
@@ -40,15 +41,16 @@ def train_velocity(config: TrainConfig, pretrain_density: int, resx: int, resy: 
     from torch.utils.tensorboard import SummaryWriter
     from datetime import datetime
     date = datetime.now().strftime('%m%d%H%M%S')
-    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}")
+    device_str = f"{config.target_device.type}{config.target_device.index if config.target_device.index is not None else ''}"
+    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}/{device_str}")
     try:
         import tqdm
         for _ in tqdm.trange(total_iter):
             vel_loss, nseloss_fine, proj_loss, min_vel_reg = model.forward(config.batch_size)
-            writer.add_scalar(f"Loss/{date}/vel_loss", vel_loss, _)
-            writer.add_scalar(f"Loss/{date}/nseloss_fine", nseloss_fine, _)
-            writer.add_scalar(f"Loss/{date}/proj_loss", proj_loss, _)
-            writer.add_scalar(f"Loss/{date}/min_vel_reg", min_vel_reg, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/vel_loss", vel_loss, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/nseloss_fine", nseloss_fine, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/proj_loss", proj_loss, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/min_vel_reg", min_vel_reg, _)
 
             if config.use_mid_ckpts and model.global_step % config.mid_ckpts_iters == 0:
                 model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
@@ -66,18 +68,19 @@ def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
     from torch.utils.tensorboard import SummaryWriter
     from datetime import datetime
     date = datetime.now().strftime('%m%d%H%M%S')
-    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}")
+    device_str = f"{config.target_device.type}{config.target_device.index if config.target_device.index is not None else ''}"
+    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}/{device_str}")
     try:
         if pretrained_ckpt:
             model.load_ckpt(pretrained_ckpt, config.target_device)
         import tqdm
         for _ in tqdm.trange(total_iter):
             vel_loss, nseloss_fine, img_loss, proj_loss, min_vel_reg = model.forward(config.batch_size, config.depth_size)
-            writer.add_scalar(f"Loss/{date}/vel_loss", vel_loss, _)
-            writer.add_scalar(f"Loss/{date}/nseloss_fine", nseloss_fine, _)
-            writer.add_scalar(f"Loss/{date}/img_loss", img_loss, _)
-            writer.add_scalar(f"Loss/{date}/proj_loss", proj_loss, _)
-            writer.add_scalar(f"Loss/{date}/min_vel_reg", min_vel_reg, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/vel_loss", vel_loss, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/nseloss_fine", nseloss_fine, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/img_loss", img_loss, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/proj_loss", proj_loss, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/min_vel_reg", min_vel_reg, _)
 
             if config.use_mid_ckpts and model.global_step % config.mid_ckpts_iters == 0:
                 model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
