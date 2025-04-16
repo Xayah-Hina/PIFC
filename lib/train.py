@@ -76,7 +76,7 @@ class _TrainModelBase:
         gamma = math.exp(math.log(target_lr_ratio) / 20000)
 
         warmup_d = torch.optim.lr_scheduler.LinearLR(self.optimizer_d, start_factor=0.01, total_iters=2000)
-        main_scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_v, gamma=gamma)
+        main_scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_d, gamma=gamma)
         self.scheduler_d = torch.optim.lr_scheduler.SequentialLR(self.optimizer_d, schedulers=[warmup_d, main_scheduler_d], milestones=[2000])
 
         warmup_v = torch.optim.lr_scheduler.LinearLR(self.optimizer_v, start_factor=0.01, total_iters=2000)
