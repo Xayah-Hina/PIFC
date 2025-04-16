@@ -71,7 +71,7 @@ class EvaluationRenderFrame(_EvaluationModelBase):
             focals = focal.unsqueeze(0)
             frame_time = torch.tensor(frame / 120.0, device=self.target_device, dtype=self.target_dtype)
 
-            dirs, _, _ = shuffle_uv(focals=focals, width=width, height=height, randomize=True, device=self.target_device, dtype=self.target_dtype)
+            dirs, _, _ = shuffle_uv(focals=focals, width=width, height=height, randomize=False, device=self.target_device, dtype=self.target_dtype)
             rays_d = torch.einsum('nij,nhwj->nhwi', poses[:, :3, :3], dirs)  # (1, H, W, 3)
             rays_o = poses[:, None, None, :3, 3].expand(rays_d.shape)  # (1, H, W, 3)
             rays_d = rays_d.reshape(-1, 3)  # (1*H*W, 3)
