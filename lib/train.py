@@ -1,7 +1,7 @@
-from lib.dataset import *
-from lib.frustum import *
-from model.encoder_hyfluid import *
-from model.model_hyfluid import *
+from .utils.dataset import *
+from .utils.frustum import *
+from .model.encoder_hyfluid import *
+from .model.model_hyfluid import *
 
 import torch
 import dataclasses
@@ -22,7 +22,6 @@ class TrainConfig:
     ratio: float
 
     # ckpt parameters
-    use_mid_ckpts: bool
     mid_ckpts_iters: int
 
     def __post_init__(self):
@@ -104,7 +103,7 @@ class _TrainModelBase:
                 'model_v': self.model_v.state_dict(),
                 'encoder_v': self.encoder_v.state_dict(),
                 'global_step': self.global_step,
-                'config': self.config,
+                'config': dataclasses.asdict(self.config),
                 'final': True,
             }, path)
         else:
@@ -116,7 +115,7 @@ class _TrainModelBase:
                 'encoder_v': self.encoder_v.state_dict(),
                 'optimizer_v': self.optimizer_v.state_dict(),
                 'global_step': self.global_step,
-                'config': self.config,
+                'config': dataclasses.asdict(self.config),
                 'final': False,
             }, path)
         print(f"Checkpoint saved to {path}")

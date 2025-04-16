@@ -1,14 +1,14 @@
-from lib.frustum import *
-from lib.solver import *
-from model.encoder_hyfluid import *
-from model.model_hyfluid import *
+from .utils.frustum import *
+from .utils.solver import *
+from .model.encoder_hyfluid import *
+from .model.model_hyfluid import *
 import torch
 import dataclasses
 
 
 @dataclasses.dataclass
 class EvaluationConfig:
-    # checkpoint path
+    # checkpoint p  ath
     pretrained_ckpt: str
     scene_name: str
 
