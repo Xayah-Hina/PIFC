@@ -2,7 +2,6 @@ from .utils.dataset import *
 from .utils.frustum import *
 from .model.encoder_hyfluid import *
 from .model.model_hyfluid import *
-
 import torch
 import dataclasses
 
@@ -32,7 +31,9 @@ class TrainConfig:
         with open(scene_info_path, 'r') as f:
             scene_info = yaml.safe_load(f)
             self.training_videos = scene_info['training_videos']
-            self.camera_calibrations = scene_info['camera_calibrations']
+            self.validation_videos = scene_info['validation_videos']
+            self.training_camera_calibrations = scene_info['training_camera_calibrations']
+            self.validation_camera_calibrations = scene_info['validation_camera_calibrations']
             self.voxel_transform = torch.tensor(scene_info['voxel_transform'], device=self.target_device, dtype=self.target_dtype)
             self.voxel_scale = torch.tensor(scene_info['voxel_scale'], device=self.target_device, dtype=self.target_dtype)
             self.s_min = torch.tensor(scene_info['s_min'], device=self.target_device, dtype=self.target_dtype)
@@ -48,7 +49,8 @@ class _TrainModelBase:
 
     def _reinitialize(self, config):
         self._load_model(config.target_device)
-        self._load_dataset(config.training_videos, config.camera_calibrations, config.ratio, config.target_device, config.target_dtype)
+        self._load_training_dataset(config.training_videos, config.training_camera_calibrations, config.ratio, config.target_device, config.target_dtype)
+        self._load_validation_dataset(config.validation_videos, config.validation_camera_calibrations, config.ratio, config.target_device, config.target_dtype)
 
         self.target_device = config.target_device
         self.target_dtype = config.target_dtype
@@ -75,10 +77,15 @@ class _TrainModelBase:
         self.scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_d, gamma=gamma)
         self.scheduler_v = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_v, gamma=gamma)
 
-    def _load_dataset(self, training_videos, camera_calibrations, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
-        assert len(training_videos) == len(camera_calibrations), "Number of videos and camera calibrations must match."
+    def _load_training_dataset(self, training_videos, training_camera_calibrations, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
+        assert len(training_videos) == len(training_camera_calibrations), "Number of videos and camera calibrations must match."
         self.videos_data = load_videos_data(*training_videos, ratio=ratio, dtype=target_dtype)
-        self.poses, self.focals, self.width, self.height, self.near, self.far = load_cameras_data(*camera_calibrations, ratio=ratio, device=target_device, dtype=target_dtype)
+        self.poses, self.focals, self.width, self.height, self.near, self.far = load_cameras_data(*training_camera_calibrations, ratio=ratio, device=target_device, dtype=target_dtype)
+
+    def _load_validation_dataset(self, validation_videos, validation_camera_calibrations, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
+        assert len(validation_videos) == len(validation_camera_calibrations), "Number of videos and camera calibrations must match."
+        self.videos_data_validation = load_videos_data(*validation_videos, ratio=ratio, dtype=target_dtype).to(target_device)
+        self.poses_validation, self.focals_validation, self.width_validation, self.height_validation, self.near_validation, self.far_validation = load_cameras_data(*validation_camera_calibrations, ratio=ratio, device=target_device, dtype=target_dtype)
 
     def _next_batch(self, batch_size: int):
         if self.generator is None:
@@ -197,6 +204,74 @@ class TrainDensityModel(_TrainModelBase):
         self.scheduler_d.step()
         self.global_step += 1
         return img_loss
+
+    @torch.compile
+    def render_frame(self, pose: torch.Tensor, focal: torch.Tensor, width: int, height: int, depth_size: int, near: float, far: float, frame: int):
+        with torch.no_grad():
+            poses = pose.unsqueeze(0)
+            focals = focal.unsqueeze(0)
+            frame_time = torch.tensor(frame / 120.0, device=self.target_device, dtype=self.target_dtype)
+
+            dirs, _, _ = shuffle_uv(focals=focals, width=width, height=height, randomize=True, device=self.target_device, dtype=self.target_dtype)
+            rays_d = torch.einsum('nij,nhwj->nhwi', poses[:, :3, :3], dirs)  # (1, H, W, 3)
+            rays_o = poses[:, None, None, :3, 3].expand(rays_d.shape)  # (1, H, W, 3)
+            rays_d = rays_d.reshape(-1, 3)  # (1*H*W, 3)
+            rays_o = rays_o.reshape(-1, 3)  # (1*H*W, 3)
+            total_ray_size = rays_d.shape[0]
+
+            batch_ray_size = width
+            final_rgb_map_list = []
+            for start_ray_index in range(0, total_ray_size, batch_ray_size):
+                batch_rays_d = rays_d[start_ray_index:start_ray_index + batch_ray_size]
+                batch_rays_o = rays_o[start_ray_index:start_ray_index + batch_ray_size]
+                batch_size_current = batch_rays_d.shape[0]
+
+                t_vals = torch.linspace(0., 1., steps=depth_size, device=self.target_device, dtype=self.target_dtype)
+                t_vals = t_vals.view(1, depth_size)
+                z_vals = near * (1. - t_vals) + far * t_vals
+                z_vals = z_vals.expand(batch_size_current, depth_size)
+
+                batch_dist_vals = z_vals[..., 1:] - z_vals[..., :-1]  # [batch_size_current, N_depths-1]
+                batch_points = batch_rays_o[:, None, :] + batch_rays_d[:, None, :] * z_vals[..., :, None]  # [batch_size_current, N_depths, 3]
+                batch_points_time = torch.cat([batch_points, frame_time.expand(batch_points[..., :1].shape)], dim=-1)
+                batch_points_time_flat = batch_points_time.reshape(-1, 4)
+
+                bbox_mask = insideMask(batch_points_time_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+                batch_points_time_flat_filtered = batch_points_time_flat[bbox_mask]
+
+                hidden = self.encoder_d(batch_points_time_flat_filtered)
+                raw_d = self.model_d(hidden)
+                raw_flat = torch.zeros([batch_size_current * depth_size], device=self.target_device, dtype=self.target_dtype)
+                raw_d_flat = raw_d.view(-1)
+                raw_flat = raw_flat.masked_scatter(bbox_mask, raw_d_flat)
+                raw = raw_flat.reshape(batch_size_current, depth_size, 1)
+
+                dists_cat = torch.cat([batch_dist_vals, torch.tensor([1e10], device=self.target_device).expand(batch_dist_vals[..., :1].shape)], -1)  # [batch_size_current, N_depths]
+                dists_final = dists_cat * torch.norm(batch_rays_d[..., None, :], dim=-1)  # [batch_size_current, N_depths]
+
+                rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
+                noise = 0.
+                alpha = 1. - torch.exp(-torch.nn.functional.relu(raw[..., -1] + noise) * dists_final)
+                weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1), device=self.target_device), 1. - alpha + 1e-10], -1), -1)[:, :-1]
+                rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
+
+                final_rgb_map_list.append(rgb_map)
+
+            final_rgb_map = torch.cat(final_rgb_map_list, dim=0).reshape(height, width, 3)
+            return final_rgb_map
+
+    def validate(self, depth_size: int):
+        validation_loss = 0.0
+        total = 0.0
+        frames = list(reversed(range(120)))
+        for i, (pose, focal, width, height, near, far) in enumerate(zip(self.poses_validation, self.focals_validation, self.width_validation, self.height_validation, self.near_validation, self.far_validation)):
+            for frame in frames:
+                rgb_map_final = self.render_frame(pose, focal, int(width), int(height), int(depth_size), float(near), float(far), frame)
+                loss_image = torch.nn.functional.mse_loss(rgb_map_final, self.videos_data_validation[frame, i])
+                print(f"frame: {frame}, video: {i}, loss: {loss_image.item():.4f}")
+                validation_loss += loss_image.item()
+                total += 1.0
+        return validation_loss / total
 
 
 class TrainVelocityModel(_TrainModelBase):

@@ -40,6 +40,10 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
             writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_d", model.scheduler_d.get_last_lr()[0], _)
             writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_v", model.scheduler_v.get_last_lr()[0], _)
 
+            if _ % 1000:
+                validation_loss = model.validate(config.depth_size)
+                writer.add_scalar(f"Validation/{date}/{device_str}/validation_loss", validation_loss, _)
+
             if config.mid_ckpts_iters != -1 and model.global_step % config.mid_ckpts_iters == 0:
                 model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
     except Exception as e:
