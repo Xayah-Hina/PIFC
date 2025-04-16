@@ -199,17 +199,12 @@ class TrainDensityModel(_TrainModelBase):
         rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
         img_loss = torch.nn.functional.mse_loss(rgb_map, batch_target_pixels)
 
-        depth_map = torch.sum(weights * z_vals, -1) / (torch.sum(weights, -1) + 1e-10)
-        disp_map = 1. / torch.max(1e-10 * torch.ones_like(depth_map), depth_map)
-        acc_map = torch.sum(weights, -1)
-        depth_map[acc_map < 1e-1] = 0.
-
-        return img_loss, rgb_map, disp_map, acc_map, weights, depth_map
+        return img_loss
 
     def forward(self, batch_size: int, depth_size: int):
         self.optimizer_d.zero_grad()
         batch_indices, batch_rays_o, batch_rays_d = self._next_batch(batch_size)
-        img_loss, rgb_map, disp_map, acc_map, weights, depth_map = self.image_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
+        img_loss = self.image_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
         img_loss.backward()
         self.optimizer_d.step()
         self.scheduler_d.step()
@@ -232,6 +227,10 @@ class TrainDensityModel(_TrainModelBase):
 
             batch_ray_size = width
             final_rgb_map_list = []
+            final_disp_map_list = []
+            final_acc_map_list = []
+            final_weights_list = []
+            final_depth_map_list = []
             for start_ray_index in range(0, total_ray_size, batch_ray_size):
                 batch_rays_d = rays_d[start_ray_index:start_ray_index + batch_ray_size]
                 batch_rays_o = rays_o[start_ray_index:start_ray_index + batch_ray_size]
@@ -266,9 +265,22 @@ class TrainDensityModel(_TrainModelBase):
                 weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1), device=self.target_device), 1. - alpha + 1e-10], -1), -1)[:, :-1]
                 rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
 
+                depth_map = torch.sum(weights * z_vals, -1) / (torch.sum(weights, -1) + 1e-10)
+                disp_map = 1. / torch.max(1e-10 * torch.ones_like(depth_map), depth_map)
+                acc_map = torch.sum(weights, -1)
+                depth_map[acc_map < 1e-1] = 0.
+
                 final_rgb_map_list.append(rgb_map)
+                final_disp_map_list.append(disp_map)
+                final_acc_map_list.append(acc_map)
+                final_weights_list.append(weights)
+                final_depth_map_list.append(depth_map)
 
             final_rgb_map = torch.cat(final_rgb_map_list, dim=0).reshape(height, width, 3)
+            final_disp_map = torch.cat(final_disp_map_list, dim=0).reshape(height, width)
+            final_acc_map = torch.cat(final_acc_map_list, dim=0).reshape(height, width)
+            final_weights = torch.cat(final_weights_list, dim=0).reshape(height, width, depth_size)
+            final_depth_map = torch.cat(final_depth_map_list, dim=0).reshape(height, width)
             return final_rgb_map
 
     def validate(self, depth_size: int):
