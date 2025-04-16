@@ -162,7 +162,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
-    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_joint', 'evaluate_render_frame', 'evaluate_resimulation', 'export_density_field'], required=True, help="Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_joint', 'evaluate_render_frame', 'evaluate_resimulation', 'export_density_field', 'export_velocity_field'], required=True, help="Choose the operation to execute.")
     parser.add_argument('--device', type=str, default="cuda:0", help="Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="Data type to use.")
     parser.add_argument('--scene', type=str, default="hyfluid", help="Scene to run.")
@@ -344,4 +344,34 @@ if __name__ == "__main__":
                 surname=f"density_{frame:03d}",
                 bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
             )
+
+    if args.option == "export_velocity_field":
+        model = EvaluationResimulation(
+            config=EvaluationConfig(
+                scene_name=args.scene,
+                pretrained_ckpt=args.checkpoint,
+                target_device=torch.device(args.device),
+                target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
+            ),
+            resx=args.resx,
+            resy=args.resy,
+            resz=args.resz,
+        )
+        frame = args.frame
+        if frame == -1:
+            for _ in tqdm.trange(120):
+                lib.houdini.export_velocity_field(
+                    vel=model.sample_velocity_grid(frame=_ + 1),
+                    save_path="ckpt/export",
+                    surname=f"velocity_{_ + 1:03d}",
+                    bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
+                )
+        else:
+            lib.houdini.export_velocity_field(
+                vel=model.sample_velocity_grid(frame=frame),
+                save_path="ckpt/export",
+                surname=f"velocity_{frame:03d}",
+                bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
+            )
+
     print("==================== Operation completed. ====================")
