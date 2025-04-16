@@ -44,7 +44,8 @@ if __name__ == "__main__":
 
     checkpoint = torch.load(args.checkpoint, map_location=args.device, weights_only=True)
     scene_name = checkpoint['config']['scene_name']
-    print(f"Evaluating: {scene_name}")
+    print(f"==================== Evaluating: {scene_name} ====================")
+    print(f"Checkpoint Information: {checkpoint['config']}")
 
     config = EvaluationConfig(
         scene_name=scene_name,
