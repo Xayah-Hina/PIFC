@@ -23,8 +23,6 @@ class EvaluationConfig:
         assert os.path.exists(scene_info_path), f"Scene info file not found: {scene_info_path}"
         with open(scene_info_path, 'r') as f:
             scene_info = yaml.safe_load(f)
-            self.training_videos = scene_info['training_videos']
-            self.camera_calibrations = scene_info['camera_calibrations']
             self.voxel_transform = torch.tensor(scene_info['voxel_transform'], device=self.target_device, dtype=self.target_dtype)
             self.voxel_scale = torch.tensor(scene_info['voxel_scale'], device=self.target_device, dtype=self.target_dtype)
             self.s_min = torch.tensor(scene_info['s_min'], device=self.target_device, dtype=self.target_dtype)

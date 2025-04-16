@@ -71,11 +71,17 @@ class _TrainModelBase:
         self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
         self.optimizer_v = torch.optim.RAdam([{'params': self.model_v.parameters(), 'weight_decay': 1e-6}, {'params': self.encoder_v.parameters(), 'eps': 1e-15}], lr=0.001, betas=(0.9, 0.99))
 
-        target_lr_ratio = 0.001
         import math
-        gamma = math.exp(math.log(target_lr_ratio) / 100000)
-        self.scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_d, gamma=gamma)
-        self.scheduler_v = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_v, gamma=gamma)
+        target_lr_ratio = 0.001
+        gamma = math.exp(math.log(target_lr_ratio) / 20000)
+
+        warmup_d = torch.optim.lr_scheduler.LinearLR(self.optimizer_d, start_factor=0.01, total_iters=2000)
+        main_scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_v, gamma=gamma)
+        self.scheduler_d = torch.optim.lr_scheduler.SequentialLR(self.optimizer_d, schedulers=[warmup_d, main_scheduler_d], milestones=[2000])
+
+        warmup_v = torch.optim.lr_scheduler.LinearLR(self.optimizer_v, start_factor=0.01, total_iters=2000)
+        main_scheduler_v = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_v, gamma=gamma)
+        self.scheduler_v = torch.optim.lr_scheduler.SequentialLR(self.optimizer_v, schedulers=[warmup_v, main_scheduler_v], milestones=[2000])
 
     def _load_training_dataset(self, training_videos, training_camera_calibrations, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
         assert len(training_videos) == len(training_camera_calibrations), "Number of videos and camera calibrations must match."
