@@ -2,6 +2,22 @@ from train import *
 from evaluate import *
 
 
+def open_file_dialog():
+    from tkinter import filedialog, Tk
+    while True:
+        root = Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        file_path = filedialog.askopenfilename(title="Select a checkpoint file", initialdir="history", filetypes=[("Checkpoint files", "*.tar")])
+        root.destroy()
+
+        if file_path and os.path.isfile(file_path):
+            print("Successfully loaded checkpoint:", file_path)
+            return file_path
+        else:
+            print("invalid file path, please select a valid checkpoint file.")
+
+
 def get_current_function_name():
     import inspect
     return inspect.currentframe().f_back.f_code.co_name
@@ -154,6 +170,7 @@ if __name__ == "__main__":
     parser.add_argument('--depth_size', type=int, default=128, help="Depth size for training.")
     parser.add_argument('--ratio', type=float, default=0.5, help="Ratio of resolution resampling.")
     parser.add_argument('--total_iter', type=int, default=10000, help="Total iterations for training.")
+    parser.add_argument('--select_ckpt', action='store_true', help="Select a checkpoint file.")
     parser.add_argument('--checkpoint', type=str, default=None, help="Checkpoint to load.")
     parser.add_argument('--resx', type=int, default=128, help="Resolution in x direction.")
     parser.add_argument('--resy', type=int, default=192, help="Resolution in y direction.")
@@ -162,6 +179,9 @@ if __name__ == "__main__":
     parser.add_argument('--use_mid_ckpts', type=bool, default=False, help="Use mid-ckpts iteration.")
     parser.add_argument('--mid_ckpts_iters', type=int, default=2000, help="Mid-ckpts iteration.")
     args = parser.parse_args()
+
+    if args.select_ckpt and args.checkpoint is None:
+        args.checkpoint = open_file_dialog()
 
     if args.option == "train_density_only":
         train_density_only(
@@ -311,9 +331,9 @@ if __name__ == "__main__":
         if frame == -1:
             for _ in tqdm.trange(120):
                 lib.houdini.export_density_field(
-                    den=model.sample_density_grid(frame=_+1),
+                    den=model.sample_density_grid(frame=_ + 1),
                     save_path="ckpt/export",
-                    surname=f"density_{_+1:03d}",
+                    surname=f"density_{_ + 1:03d}",
                 )
         else:
             lib.houdini.export_density_field(
