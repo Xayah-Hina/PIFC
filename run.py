@@ -312,6 +312,7 @@ if __name__ == "__main__":
                     den,
                     save_path="ckpt/resimulation",
                     surname=f"density_{step:03d}",
+                    bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
                 )
 
     if args.option == "export_density_field":
@@ -334,11 +335,13 @@ if __name__ == "__main__":
                     den=model.sample_density_grid(frame=_ + 1),
                     save_path="ckpt/export",
                     surname=f"density_{_ + 1:03d}",
+                    bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
                 )
         else:
             lib.houdini.export_density_field(
                 den=model.sample_density_grid(frame=frame),
                 save_path="ckpt/export",
                 surname=f"density_{frame:03d}",
+                bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
             )
     print("==================== Operation completed. ====================")
