@@ -199,12 +199,17 @@ class TrainDensityModel(_TrainModelBase):
         rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
         img_loss = torch.nn.functional.mse_loss(rgb_map, batch_target_pixels)
 
-        return img_loss
+        depth_map = torch.sum(weights * z_vals, -1) / (torch.sum(weights, -1) + 1e-10)
+        disp_map = 1. / torch.max(1e-10 * torch.ones_like(depth_map), depth_map)
+        acc_map = torch.sum(weights, -1)
+        depth_map[acc_map < 1e-1] = 0.
+
+        return img_loss, rgb_map, disp_map, acc_map, weights, depth_map
 
     def forward(self, batch_size: int, depth_size: int):
         self.optimizer_d.zero_grad()
         batch_indices, batch_rays_o, batch_rays_d = self._next_batch(batch_size)
-        img_loss = self.image_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
+        img_loss, rgb_map, disp_map, acc_map, weights, depth_map = self.image_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
         img_loss.backward()
         self.optimizer_d.step()
         self.scheduler_d.step()
