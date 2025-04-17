@@ -82,24 +82,21 @@ if __name__ == "__main__":
         width = int(width * ratio)
         height = int(height * ratio)
 
-        frame = list(reversed(range(120)))
         with torch.no_grad():
             model = EvaluationRenderFrame(config)
             import imageio.v3 as imageio
 
-            if isinstance(frame, int):
-                rgb_map_final = model.render_frame(args.batch_ray_size, pose, focal, width, height, args.depth_size, near, far, frame)
-                rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
-                os.makedirs(f'ckpt/{scene_name}/render_frame', exist_ok=True)
-                imageio.imwrite(os.path.join(f'ckpt/{scene_name}/render_frame', 'rgb_{:03d}.png'.format(frame)), rgb8)
-            elif isinstance(frame, list):
-                for f in tqdm.tqdm(frame, desc="Rendering frames", unit="frame"):
+            if args.frame == -1:
+                for f in tqdm.tqdm(list(reversed(range(120))), desc="Rendering frames", unit="frame"):
                     rgb_map_final = model.render_frame(args.batch_ray_size, pose, focal, width, height, args.depth_size, near, far, f)
                     rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
                     os.makedirs(f'ckpt/{scene_name}/render_frame', exist_ok=True)
                     imageio.imwrite(os.path.join(f'ckpt/{scene_name}/render_frame', 'rgb_{:03d}.png'.format(f)), rgb8)
             else:
-                raise ValueError("frame should be an integer or a list of integers.")
+                rgb_map_final = model.render_frame(args.batch_ray_size, pose, focal, width, height, args.depth_size, near, far, args.frame)
+                rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
+                os.makedirs(f'ckpt/{scene_name}/render_frame', exist_ok=True)
+                imageio.imwrite(os.path.join(f'ckpt/{scene_name}/render_frame', 'rgb_{:03d}.png'.format(args.frame)), rgb8)
 
     if args.option == "evaluate_resimulation":
         with torch.no_grad():
