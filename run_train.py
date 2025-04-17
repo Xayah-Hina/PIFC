@@ -130,7 +130,7 @@ if __name__ == "__main__":
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
     parser.add_argument('--scene', type=str, choices=['hyfluid', 'plume_1'], default="hyfluid", help="[General] Scene to run.")
     parser.add_argument('--batch_size', type=int, default=1024, help="[General] Batch size for training.")
-    parser.add_argument('--depth_size', type=int, default=256, help="[General] Depth size for training.")
+    parser.add_argument('--depth_size', type=int, default=512, help="[General] Depth size for training.")
     parser.add_argument('--ratio', type=float, default=0.5, help="[General] Ratio of resolution resampling.")
     parser.add_argument('--total_iter', type=int, default=10000, help="[General] Total iterations for training.")
     parser.add_argument('--select_ckpt', action='store_true', help="[General] Select a pretrained checkpoint file.")
