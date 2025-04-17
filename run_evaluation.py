@@ -26,7 +26,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
-    parser.add_argument('--option', type=str, choices=['evaluate_init_model', 'evaluate_render_frame', 'evaluate_resimulation', 'export_density_field', 'export_velocity_field'], required=True, help="[Required][General] Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=['evaluate_render_frame', 'evaluate_resimulation', 'export_density_field', 'export_velocity_field'], required=True, help="[Required][General] Choose the operation to execute.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
     parser.add_argument('--select_ckpt', action='store_true', help="[General] Select a pretrained checkpoint file.")
@@ -39,10 +39,9 @@ if __name__ == "__main__":
     parser.add_argument('--batch_ray_size', type=int, default=1024 * 32, help="[evaluate_render_frame only] Batch ray size for training.")
     args = parser.parse_args()
 
-    if args.option != "evaluate_init_model":
-        if args.select_ckpt and args.checkpoint is None:
-            args.checkpoint = open_file_dialog()
-        assert args.checkpoint is not None, "Checkpoint are required for evaluation."
+    if args.select_ckpt and args.checkpoint is None:
+        args.checkpoint = open_file_dialog()
+    assert args.checkpoint is not None, "Checkpoint are required for evaluation."
 
     checkpoint = torch.load(args.checkpoint, map_location=args.device, weights_only=True)
     scene_name = checkpoint['config']['scene_name']
@@ -56,7 +55,7 @@ if __name__ == "__main__":
         target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
     )
 
-    if args.option == "evaluate_init_model" or args.option == "evaluate_render_frame":
+    if args.option == "evaluate_render_frame":
         if scene_name == "hyfluid":
             pose = torch.tensor([[0.4863, -0.2431, -0.8393, -0.7697],
                                  [-0.0189, 0.9574, -0.2882, 0.0132],
@@ -85,10 +84,7 @@ if __name__ == "__main__":
 
         frame = list(reversed(range(120)))
         with torch.no_grad():
-            if args.option == "evaluate_init_model":
-                model = EvaluationInitModel(config)
-            else:
-                model = EvaluationRenderFrame(config)
+            model = EvaluationRenderFrame(config)
             import imageio.v3 as imageio
 
             if isinstance(frame, int):
