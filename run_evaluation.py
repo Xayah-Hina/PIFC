@@ -113,7 +113,7 @@ if __name__ == "__main__":
                     den = model.advect_density(den, vel_sim_confined, source, dt, model.coord_3d_sim[..., 1] > source_height)
                 lib.utils.houdini.export_density_field(
                     den,
-                    save_path="ckpt/resimulation",
+                    save_path="ckpt/{scene_name}/resimulation",
                     surname=f"density_{step:03d}",
                     bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
                 )
@@ -124,14 +124,14 @@ if __name__ == "__main__":
             for _ in tqdm.trange(120):
                 lib.utils.houdini.export_density_field(
                     den=model.sample_density_grid(frame=_ + 1),
-                    save_path="ckpt/export",
+                    save_path="ckpt/{scene_name}/export",
                     surname=f"density_{_ + 1:03d}",
                     bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
                 )
         else:
             lib.utils.houdini.export_density_field(
                 den=model.sample_density_grid(frame=args.frame),
-                save_path="ckpt/export",
+                save_path="ckpt/{scene_name}/export",
                 surname=f"density_{args.frame:03d}",
                 bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
             )
@@ -142,14 +142,14 @@ if __name__ == "__main__":
             for _ in tqdm.trange(120):
                 lib.utils.houdini.export_velocity_field(
                     vel=model.sample_velocity_grid(frame=_ + 1),
-                    save_path="ckpt/export",
+                    save_path="ckpt/{scene_name}/export",
                     surname=f"velocity_{_ + 1:03d}",
                     bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
                 )
         else:
             lib.utils.houdini.export_velocity_field(
                 vel=model.sample_velocity_grid(frame=args.frame),
-                save_path="ckpt/export",
+                save_path="ckpt/{scene_name}/export",
                 surname=f"velocity_{args.frame:03d}",
                 bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
             )
