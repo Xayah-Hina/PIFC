@@ -118,6 +118,8 @@ def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
 
 
 if __name__ == "__main__":
+    import os
+    os.environ["TORCH_DISABLE_TORCH_COMPILE"] = "1"
     print("==================== Training starting. ====================")
 
     import argparse
