@@ -32,7 +32,7 @@ if __name__ == "__main__":
     parser.add_argument('--select_ckpt', action='store_true', help="[General] Select a pretrained checkpoint file.")
     parser.add_argument('--checkpoint', type=str, default=None, help="[General] Load a pretrained checkpoint.")
     parser.add_argument('--frame', type=int, default=-1, help="[General] Frame to evaluate.")
-    parser.add_argument('--depth_size', type=int, default=128, help="[evaluate_render_frame only] Depth size for training.")
+    parser.add_argument('--depth_size', type=int, default=256, help="[evaluate_render_frame only] Depth size for training.")
     parser.add_argument('--resx', type=int, default=128, help="[evaluate_resimulation, export_density_field, export_velocity_field] Resolution in x direction.")
     parser.add_argument('--resy', type=int, default=192, help="[evaluate_resimulation, export_density_field, export_velocity_field] Resolution in y direction.")
     parser.add_argument('--resz', type=int, default=128, help="[evaluate_resimulation, export_density_field, export_velocity_field] Resolution in z direction.")
@@ -65,7 +65,7 @@ if __name__ == "__main__":
             width = 1080
             height = 1920
             near = 1.1
-            far = 1.5
+            far = 1.5 + 1.0
         else:
             pose = torch.tensor([[-6.5174e-01, 7.3241e-02, 7.5490e-01, 3.5361e+00],
                                  [-6.9389e-18, 9.9533e-01, -9.6567e-02, 1.9000e+00],
@@ -75,9 +75,9 @@ if __name__ == "__main__":
             width = 1080
             height = 1920
             near = 2.5
-            far = 5.4
+            far = 5.4 + 1.0
 
-        ratio = 1.0
+        ratio = 0.5
         focal = focal * ratio
         width = int(width * ratio)
         height = int(height * ratio)
@@ -148,9 +148,9 @@ if __name__ == "__main__":
                 )
         else:
             lib.utils.houdini.export_velocity_field(
-                vel=model.sample_velocity_grid(frame=frame),
+                vel=model.sample_velocity_grid(frame=args.frame),
                 save_path="ckpt/export",
-                surname=f"velocity_{frame:03d}",
+                surname=f"velocity_{args.frame:03d}",
                 bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
             )
 

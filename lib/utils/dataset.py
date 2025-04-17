@@ -110,7 +110,7 @@ def load_cameras_data(*cameras_paths, ratio, device: torch.device, dtype: torch.
     widths = widths * ratio
     heights = heights * ratio
 
-    return poses, focals, widths, heights, nears, fars
+    return poses, focals, widths, heights, nears, fars + 1.0
 
 
 def load_rotating_camera_data(*cameras_paths, ratio, device: torch.device, dtype: torch.dtype):

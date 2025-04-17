@@ -164,7 +164,7 @@ if __name__ == "__main__":
     if args.option == "train_velocity":
         train_velocity(
             config=config,
-            pretrain_density=100000,
+            pretrain_density=20000,
             resx=args.resx,
             resy=args.resy,
             resz=args.resz,
