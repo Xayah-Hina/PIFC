@@ -72,8 +72,8 @@ class _TrainModelBase:
         self.optimizer_v = torch.optim.RAdam([{'params': self.model_v.parameters(), 'weight_decay': 1e-6}, {'params': self.encoder_v.parameters(), 'eps': 1e-15}], lr=0.001, betas=(0.9, 0.99))
 
         import math
-        target_lr_ratio = 0.001
-        gamma = math.exp(math.log(target_lr_ratio) / 20000)
+        target_lr_ratio = 0.0001
+        gamma = math.exp(math.log(target_lr_ratio) / 100000)
 
         warmup_d = torch.optim.lr_scheduler.LinearLR(self.optimizer_d, start_factor=0.01, total_iters=2000)
         main_scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_d, gamma=gamma)
