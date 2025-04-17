@@ -1,3 +1,4 @@
+from .utils.dataset import *
 from .utils.frustum import *
 from .utils.solver import *
 from .model.encoder_hyfluid import *
@@ -16,6 +17,8 @@ class EvaluationConfig:
     target_device: torch.device
     target_dtype: torch.dtype
 
+    ratio: float
+
     def __post_init__(self):
         import yaml
         import os
@@ -23,6 +26,8 @@ class EvaluationConfig:
         assert os.path.exists(scene_info_path), f"Scene info file not found: {scene_info_path}"
         with open(scene_info_path, 'r') as f:
             scene_info = yaml.safe_load(f)
+            self.validation_videos = scene_info['validation_videos']
+            self.validation_camera_calibrations = scene_info['validation_camera_calibrations']
             self.voxel_transform = torch.tensor(scene_info['voxel_transform'], device=self.target_device, dtype=self.target_dtype)
             self.voxel_scale = torch.tensor(scene_info['voxel_scale'], device=self.target_device, dtype=self.target_dtype)
             self.s_min = torch.tensor(scene_info['s_min'], device=self.target_device, dtype=self.target_dtype)
@@ -35,11 +40,13 @@ class EvaluationConfig:
 class _EvaluationModelBase:
     def __init__(self, config):
         self._load_model(config.target_device)
+        self._load_validation_dataset(config.validation_videos, config.validation_camera_calibrations, config.ratio, config.target_device, config.target_dtype)
         self.load_ckpt(config.pretrained_ckpt, config.target_device)
 
         self.target_device = config.target_device
         self.target_dtype = config.target_dtype
         self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = config.s_w2s, config.s2w, config.s_scale, config.s_min, config.s_max
+        self.ratio = config.ratio
 
     def _load_model(self, target_device: torch.device):
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
@@ -59,12 +66,28 @@ class _EvaluationModelBase:
         except Exception as e:
             print(f"Error loading model: {e}")
 
+    def _load_validation_dataset(self, validation_videos, validation_camera_calibrations, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
+        assert len(validation_videos) == len(validation_camera_calibrations), "Number of videos and camera calibrations must match."
+        self.videos_data_validation = load_videos_data(*validation_videos, ratio=ratio, dtype=target_dtype).to(target_device)
+        self.poses_validation, self.focals_validation, self.width_validation, self.height_validation, self.near_validation, self.far_validation = load_cameras_data(*validation_camera_calibrations, ratio=ratio, device=target_device, dtype=target_dtype)
+
+        self.width = int(self.width_validation[0].item())
+        self.height = int(self.height_validation[0].item())
+        self.near = float(self.near_validation[0].item())
+        self.far = float(self.far_validation[0].item())
+
 class EvaluationRenderFrame(_EvaluationModelBase):
     def __init__(self, config: EvaluationConfig):
         super().__init__(config)
 
     @torch.compile
-    def render_frame(self, batch_ray_size: int, pose: torch.Tensor, focal: torch.Tensor, width: int, height: int, depth_size: int, near: float, far: float, frame: int):
+    def render_frame(self, batch_ray_size: int, depth_size: int, frame: int):
+        pose = self.poses_validation[0]
+        focal = self.focals_validation[0]
+        width = self.width
+        height = self.height
+        near = self.near
+        far = self.far
         with torch.no_grad():
             poses = pose.unsqueeze(0)
             focals = focal.unsqueeze(0)

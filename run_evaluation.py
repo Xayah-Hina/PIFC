@@ -53,47 +53,22 @@ if __name__ == "__main__":
         pretrained_ckpt=args.checkpoint,
         target_device=torch.device(args.device),
         target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
+        ratio=0.5,
     )
 
     if args.option == "evaluate_render_frame":
-        if scene_name == "hyfluid":
-            pose = torch.tensor([[0.4863, -0.2431, -0.8393, -0.7697],
-                                 [-0.0189, 0.9574, -0.2882, 0.0132],
-                                 [0.8736, 0.1560, 0.4610, 0.3250],
-                                 [0.0000, 0.0000, 0.0000, 1.0000]], device=torch.device(args.device), dtype=torch.float32)
-            focal = torch.tensor(2613.7634, device=torch.device(args.device), dtype=torch.float32)
-            width = 1080
-            height = 1920
-            near = 1.1
-            far = 1.5 + 1.0
-        else:
-            pose = torch.tensor([[-6.5174e-01, 7.3241e-02, 7.5490e-01, 3.5361e+00],
-                                 [-6.9389e-18, 9.9533e-01, -9.6567e-02, 1.9000e+00],
-                                 [-7.5844e-01, -6.2937e-02, -6.4869e-01, -2.6511e+00],
-                                 [0.0000e+00, 0.0000e+00, 0.0000e+00, 1.0000e+00]], device=torch.device(args.device), dtype=torch.float32)
-            focal = torch.tensor(1303.6753, device=torch.device(args.device), dtype=torch.float32)
-            width = 1080
-            height = 1920
-            near = 2.5
-            far = 5.4 + 1.0
-
-        ratio = 0.5
-        focal = focal * ratio
-        width = int(width * ratio)
-        height = int(height * ratio)
-
         with torch.no_grad():
             model = EvaluationRenderFrame(config)
             import imageio.v3 as imageio
 
             if args.frame == -1:
                 for f in tqdm.tqdm(list(reversed(range(120))), desc="Rendering frames", unit="frame"):
-                    rgb_map_final = model.render_frame(args.batch_ray_size, pose, focal, width, height, args.depth_size, near, far, f)
+                    rgb_map_final = model.render_frame(args.batch_ray_size, args.depth_size, f)
                     rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
                     os.makedirs(f'ckpt/{scene_name}/render_frame', exist_ok=True)
                     imageio.imwrite(os.path.join(f'ckpt/{scene_name}/render_frame', 'rgb_{:03d}.png'.format(f)), rgb8)
             else:
-                rgb_map_final = model.render_frame(args.batch_ray_size, pose, focal, width, height, args.depth_size, near, far, args.frame)
+                rgb_map_final = model.render_frame(args.batch_ray_size, args.depth_size, args.frame)
                 rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
                 os.makedirs(f'ckpt/{scene_name}/render_frame', exist_ok=True)
                 imageio.imwrite(os.path.join(f'ckpt/{scene_name}/render_frame', 'rgb_{:03d}.png'.format(args.frame)), rgb8)
@@ -113,7 +88,7 @@ if __name__ == "__main__":
                     den = model.advect_density(den, vel_sim_confined, source, dt, model.coord_3d_sim[..., 1] > source_height)
                 lib.utils.houdini.export_density_field(
                     den,
-                    save_path="ckpt/{scene_name}/resimulation",
+                    save_path=f"ckpt/{scene_name}/resimulation",
                     surname=f"density_{step:03d}",
                     bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
                 )
