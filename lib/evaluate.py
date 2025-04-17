@@ -84,16 +84,12 @@ class EvaluationRenderFrame(_EvaluationModelBase):
     def render_frame(self, batch_ray_size: int, depth_size: int, frame: int):
         pose = self.poses_validation[0]
         focal = self.focals_validation[0]
-        width = self.width
-        height = self.height
-        near = self.near
-        far = self.far
         with torch.no_grad():
             poses = pose.unsqueeze(0)
             focals = focal.unsqueeze(0)
             frame_time = torch.tensor(frame / 120.0, device=self.target_device, dtype=self.target_dtype)
 
-            dirs, _, _ = shuffle_uv(focals=focals, width=width, height=height, randomize=False, device=self.target_device, dtype=self.target_dtype)
+            dirs, _, _ = shuffle_uv(focals=focals, width=self.width, height=self.height, randomize=False, device=self.target_device, dtype=self.target_dtype)
             rays_d = torch.einsum('nij,nhwj->nhwi', poses[:, :3, :3], dirs)  # (1, H, W, 3)
             rays_o = poses[:, None, None, :3, 3].expand(rays_d.shape)  # (1, H, W, 3)
             rays_d = rays_d.reshape(-1, 3)  # (1*H*W, 3)
@@ -108,7 +104,7 @@ class EvaluationRenderFrame(_EvaluationModelBase):
 
                 t_vals = torch.linspace(0., 1., steps=depth_size, device=self.target_device, dtype=self.target_dtype)
                 t_vals = t_vals.view(1, depth_size)
-                z_vals = near * (1. - t_vals) + far * t_vals
+                z_vals = self.near * (1. - t_vals) + self.far * t_vals
                 z_vals = z_vals.expand(batch_size_current, depth_size)
 
                 batch_dist_vals = z_vals[..., 1:] - z_vals[..., :-1]  # [batch_size_current, N_depths-1]
@@ -137,7 +133,7 @@ class EvaluationRenderFrame(_EvaluationModelBase):
 
                 final_rgb_map_list.append(rgb_map)
 
-            final_rgb_map = torch.cat(final_rgb_map_list, dim=0).reshape(height, width, 3)
+            final_rgb_map = torch.cat(final_rgb_map_list, dim=0).reshape(self.height, self.width, 3)
             return final_rgb_map
 
 
