@@ -60,12 +60,22 @@ class _EvaluationModelBase:
             print(f"Error loading model: {e}")
 
 
-class EvaluationRenderFrame(_EvaluationModelBase):
+class EvaluationInitModel:
     def __init__(self, config: EvaluationConfig):
-        super().__init__(config)
+        self._load_model(config.target_device)
+
+        self.target_device = config.target_device
+        self.target_dtype = config.target_dtype
+        self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = config.s_w2s, config.s2w, config.s_scale, config.s_min, config.s_max
+
+    def _load_model(self, target_device: torch.device):
+        self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
+        self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
+        self.encoder_v = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
+        self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
 
     @torch.compile
-    def render_frame(self, pose: torch.Tensor, focal: torch.Tensor, width: int, height: int, depth_size: int, near: float, far: float, frame: int):
+    def render_frame(self, batch_ray_size: int, pose: torch.Tensor, focal: torch.Tensor, width: int, height: int, depth_size: int, near: float, far: float, frame: int):
         with torch.no_grad():
             poses = pose.unsqueeze(0)
             focals = focal.unsqueeze(0)
@@ -78,7 +88,65 @@ class EvaluationRenderFrame(_EvaluationModelBase):
             rays_o = rays_o.reshape(-1, 3)  # (1*H*W, 3)
             total_ray_size = rays_d.shape[0]
 
-            batch_ray_size = width * 16
+            final_rgb_map_list = []
+            for start_ray_index in range(0, total_ray_size, batch_ray_size):
+                batch_rays_d = rays_d[start_ray_index:start_ray_index + batch_ray_size]
+                batch_rays_o = rays_o[start_ray_index:start_ray_index + batch_ray_size]
+                batch_size_current = batch_rays_d.shape[0]
+
+                t_vals = torch.linspace(0., 1., steps=depth_size, device=self.target_device, dtype=self.target_dtype)
+                t_vals = t_vals.view(1, depth_size)
+                z_vals = near * (1. - t_vals) + far * t_vals
+                z_vals = z_vals.expand(batch_size_current, depth_size)
+
+                batch_dist_vals = z_vals[..., 1:] - z_vals[..., :-1]  # [batch_size_current, N_depths-1]
+                batch_points = batch_rays_o[:, None, :] + batch_rays_d[:, None, :] * z_vals[..., :, None]  # [batch_size_current, N_depths, 3]
+                batch_points_time = torch.cat([batch_points, frame_time.expand(batch_points[..., :1].shape)], dim=-1)
+                batch_points_time_flat = batch_points_time.reshape(-1, 4)
+
+                bbox_mask = insideMask(batch_points_time_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+                batch_points_time_flat_filtered = batch_points_time_flat[bbox_mask]
+
+                hidden = self.encoder_d(batch_points_time_flat_filtered)
+                raw_d = self.model_d(hidden)
+                raw_flat = torch.zeros([batch_size_current * depth_size], device=self.target_device, dtype=self.target_dtype)
+                raw_d_flat = raw_d.view(-1)
+                raw_flat = raw_flat.masked_scatter(bbox_mask, raw_d_flat)
+                raw = raw_flat.reshape(batch_size_current, depth_size, 1)
+
+                dists_cat = torch.cat([batch_dist_vals, torch.tensor([1e10], device=self.target_device).expand(batch_dist_vals[..., :1].shape)], -1)  # [batch_size_current, N_depths]
+                dists_final = dists_cat * torch.norm(batch_rays_d[..., None, :], dim=-1)  # [batch_size_current, N_depths]
+
+                rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
+                noise = 0.
+                alpha = 1. - torch.exp(-torch.nn.functional.relu(raw[..., -1] + noise) * dists_final)
+                weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1), device=self.target_device), 1. - alpha + 1e-10], -1), -1)[:, :-1]
+                rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
+
+                final_rgb_map_list.append(rgb_map)
+
+            final_rgb_map = torch.cat(final_rgb_map_list, dim=0).reshape(height, width, 3)
+            return final_rgb_map
+
+
+class EvaluationRenderFrame(_EvaluationModelBase):
+    def __init__(self, config: EvaluationConfig):
+        super().__init__(config)
+
+    @torch.compile
+    def render_frame(self, batch_ray_size: int, pose: torch.Tensor, focal: torch.Tensor, width: int, height: int, depth_size: int, near: float, far: float, frame: int):
+        with torch.no_grad():
+            poses = pose.unsqueeze(0)
+            focals = focal.unsqueeze(0)
+            frame_time = torch.tensor(frame / 120.0, device=self.target_device, dtype=self.target_dtype)
+
+            dirs, _, _ = shuffle_uv(focals=focals, width=width, height=height, randomize=False, device=self.target_device, dtype=self.target_dtype)
+            rays_d = torch.einsum('nij,nhwj->nhwi', poses[:, :3, :3], dirs)  # (1, H, W, 3)
+            rays_o = poses[:, None, None, :3, 3].expand(rays_d.shape)  # (1, H, W, 3)
+            rays_d = rays_d.reshape(-1, 3)  # (1*H*W, 3)
+            rays_o = rays_o.reshape(-1, 3)  # (1*H*W, 3)
+            total_ray_size = rays_d.shape[0]
+
             final_rgb_map_list = []
             for start_ray_index in range(0, total_ray_size, batch_ray_size):
                 batch_rays_d = rays_d[start_ray_index:start_ray_index + batch_ray_size]
