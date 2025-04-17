@@ -140,7 +140,7 @@ if __name__ == "__main__":
 
     if args.option == "export_velocity_field":
         model = EvaluationResimulation(config, args.resx, args.resy, args.resz)
-        if frame == -1:
+        if args.frame == -1:
             for _ in tqdm.trange(120):
                 lib.utils.houdini.export_velocity_field(
                     vel=model.sample_velocity_grid(frame=_ + 1),

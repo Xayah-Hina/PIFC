@@ -78,7 +78,7 @@ class EvaluationRenderFrame(_EvaluationModelBase):
             rays_o = rays_o.reshape(-1, 3)  # (1*H*W, 3)
             total_ray_size = rays_d.shape[0]
 
-            batch_ray_size = width
+            batch_ray_size = width * 16
             final_rgb_map_list = []
             for start_ray_index in range(0, total_ray_size, batch_ray_size):
                 batch_rays_d = rays_d[start_ray_index:start_ray_index + batch_ray_size]
