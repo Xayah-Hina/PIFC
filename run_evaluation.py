@@ -36,7 +36,7 @@ if __name__ == "__main__":
     parser.add_argument('--resx', type=int, default=128, help="[evaluate_resimulation, export_density_field, export_velocity_field] Resolution in x direction.")
     parser.add_argument('--resy', type=int, default=192, help="[evaluate_resimulation, export_density_field, export_velocity_field] Resolution in y direction.")
     parser.add_argument('--resz', type=int, default=128, help="[evaluate_resimulation, export_density_field, export_velocity_field] Resolution in z direction.")
-    parser.add_argument('--batch_ray_size', type=int, default=1024 * 32, help="[evaluate_render_frame only] Batch ray size for training.")
+    parser.add_argument('--batch_ray_size', type=int, default=1024 * 16, help="[evaluate_render_frame only] Batch ray size for training.")
     args = parser.parse_args()
 
     if args.select_ckpt and args.checkpoint is None:
