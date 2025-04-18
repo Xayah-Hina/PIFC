@@ -1,6 +1,5 @@
 from lib.train import *
 import tqdm
-import os
 
 
 def open_file_dialog():

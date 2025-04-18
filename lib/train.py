@@ -23,7 +23,7 @@ class TrainConfig:
     # ckpt parameters
     mid_ckpts_iters: int
 
-    use_rgb: bool = False
+    use_rgb: bool = True
 
     def __post_init__(self):
         import yaml
