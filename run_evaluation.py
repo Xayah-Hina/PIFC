@@ -45,8 +45,10 @@ if __name__ == "__main__":
 
     checkpoint = torch.load(args.checkpoint, map_location=args.device, weights_only=True)
     scene_name = checkpoint['config']['scene_name']
+    frame_start = int(checkpoint['config']['frame_start'])
+    frame_end = int(checkpoint['config']['frame_end'])
     print(f"==================== Evaluating: {scene_name} ====================")
-    print(f"Checkpoint Information: {checkpoint['config']}")
+    print(f"Checkpoint Information: {checkpoint['config']}, frame_start: {frame_start}, frame_end: {frame_end}")
 
     evaluation_config = EvaluationConfig(
         scene_name=scene_name,
@@ -55,24 +57,24 @@ if __name__ == "__main__":
         target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
         ratio=0.5,
         use_rgb=scene_name == "plume_color_1",
-        frame_start=0,
-        frame_end=120,
+        frame_start=frame_start,
+        frame_end=frame_end,
     )
 
     if args.option == "evaluate_render_frame":
         with torch.no_grad():
             model = EvaluationRenderFrame(evaluation_config)
             import imageio.v3 as imageio
+            import imageio.v2 as imageiov2
 
             if args.frame == -1:
                 rgb8_list = []
-                for f in tqdm.tqdm(list(reversed(range(120))), desc="Rendering frames", unit="frame"):
+                for f in tqdm.tqdm(list(reversed(range(frame_start, frame_end))), desc="Rendering frames", unit="frame"):
                     rgb_map_final = model.render_frame(args.batch_ray_size, args.depth_size, f)
                     rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
                     os.makedirs(f'ckpt/{scene_name}/render_frame', exist_ok=True)
                     imageio.imwrite(os.path.join(f'ckpt/{scene_name}/render_frame', 'rgb_{:03d}.png'.format(f)), rgb8)
                     rgb8_list.append(rgb8)
-                import imageio.v2 as imageiov2
                 imageiov2.mimsave(os.path.join(f'ckpt/{scene_name}/render_frame', 'video_rgb.mp4'.format(f)), list(reversed(rgb8_list)), fps=24)
             else:
                 rgb_map_final = model.render_frame(args.batch_ray_size, args.depth_size, args.frame)
@@ -87,8 +89,8 @@ if __name__ == "__main__":
             source_height = 0.15
             den = model.sample_density_grid(0)
             source = den
-            for step in tqdm.trange(120):
-                if step > 0:
+            for step in tqdm.trange(frame_start, frame_end):
+                if step > frame_start:
                     vel = model.sample_velocity_grid(step - 1)
                     vel_sim_confined = world2sim_rot(vel, model.s_w2s, model.s_scale)
                     source = model.sample_density_grid(step)
@@ -103,9 +105,9 @@ if __name__ == "__main__":
     if args.option == "export_density_field":
         model = EvaluationResimulation(evaluation_config, args.resx, args.resy, args.resz)
         if args.frame == -1:
-            for _ in tqdm.trange(120):
+            for _ in tqdm.trange(frame_start, frame_end):
                 lib.utils.houdini.export_density_field(
-                    den=model.sample_density_grid(frame=_ + 1),
+                    den=model.sample_density_grid(frame=_),
                     save_path=f"ckpt/{scene_name}/export",
                     surname=f"density_{_ + 1:03d}",
                     bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
@@ -121,9 +123,9 @@ if __name__ == "__main__":
     if args.option == "export_velocity_field":
         model = EvaluationResimulation(evaluation_config, args.resx, args.resy, args.resz)
         if args.frame == -1:
-            for _ in tqdm.trange(120):
+            for _ in tqdm.trange(frame_start, frame_end):
                 lib.utils.houdini.export_velocity_field(
-                    vel=model.sample_velocity_grid(frame=_ + 1),
+                    vel=model.sample_velocity_grid(frame=_),
                     save_path=f"ckpt/{scene_name}/export",
                     surname=f"velocity_{_ + 1:03d}",
                     bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
