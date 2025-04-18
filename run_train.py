@@ -139,7 +139,7 @@ if __name__ == "__main__":
     if args.select_ckpt and args.checkpoint is None:
         args.checkpoint = open_file_dialog()
 
-    config = TrainConfig(
+    train_config = TrainConfig(
         scene_name=args.scene,
         target_device=torch.device(args.device),
         target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
@@ -152,14 +152,14 @@ if __name__ == "__main__":
 
     if args.option == "train_density_only":
         train_density_only(
-            config=config,
+            config=train_config,
             total_iter=args.total_iter,
             pretrained_ckpt=args.checkpoint,
         )
 
     if args.option == "train_velocity":
         train_velocity(
-            config=config,
+            config=train_config,
             pretrain_density=20000,
             resx=args.resx,
             resy=args.resy,
@@ -170,7 +170,7 @@ if __name__ == "__main__":
 
     if args.option == "train_joint":
         train_joint(
-            config=config,
+            config=train_config,
             total_iter=args.total_iter,
             pretrained_ckpt=args.checkpoint,
         )

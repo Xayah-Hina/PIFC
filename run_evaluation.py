@@ -48,7 +48,7 @@ if __name__ == "__main__":
     print(f"==================== Evaluating: {scene_name} ====================")
     print(f"Checkpoint Information: {checkpoint['config']}")
 
-    config = EvaluationConfig(
+    evaluation_config = EvaluationConfig(
         scene_name=scene_name,
         pretrained_ckpt=args.checkpoint,
         target_device=torch.device(args.device),
@@ -59,7 +59,7 @@ if __name__ == "__main__":
 
     if args.option == "evaluate_render_frame":
         with torch.no_grad():
-            model = EvaluationRenderFrame(config)
+            model = EvaluationRenderFrame(evaluation_config)
             import imageio.v3 as imageio
 
             if args.frame == -1:
@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     if args.option == "evaluate_resimulation":
         with torch.no_grad():
-            model = EvaluationResimulation(config, args.resx, args.resy, args.resz)
+            model = EvaluationResimulation(evaluation_config, args.resx, args.resy, args.resz)
             dt = 1.0 / 119.0
             source_height = 0.15
             den = model.sample_density_grid(0)
@@ -95,7 +95,7 @@ if __name__ == "__main__":
                 )
 
     if args.option == "export_density_field":
-        model = EvaluationResimulation(config, args.resx, args.resy, args.resz)
+        model = EvaluationResimulation(evaluation_config, args.resx, args.resy, args.resz)
         if args.frame == -1:
             for _ in tqdm.trange(120):
                 lib.utils.houdini.export_density_field(
@@ -113,7 +113,7 @@ if __name__ == "__main__":
             )
 
     if args.option == "export_velocity_field":
-        model = EvaluationResimulation(config, args.resx, args.resy, args.resz)
+        model = EvaluationResimulation(evaluation_config, args.resx, args.resy, args.resz)
         if args.frame == -1:
             for _ in tqdm.trange(120):
                 lib.utils.houdini.export_velocity_field(
