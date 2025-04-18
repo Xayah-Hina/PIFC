@@ -160,7 +160,7 @@ class NeRFSmall_c(torch.nn.Module):
                 in_dim = hidden_dim_color
 
             if l == num_layers_color - 1:
-                out_dim = 1
+                out_dim = 3
             else:
                 out_dim = hidden_dim_color
 
@@ -178,5 +178,5 @@ class NeRFSmall_c(torch.nn.Module):
         for l in range(1, self.num_layers_color):
             color = torch.nn.functional.relu(color, inplace=True)
             color = self.color_net[l](color)
-        sigma_rgb = torch.cat([sigma, color], dim=-1)
+        sigma_rgb = torch.cat([sigma[..., 0], color], dim=-1)
         return sigma_rgb
