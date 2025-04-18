@@ -117,10 +117,6 @@ def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
 
 
 if __name__ == "__main__":
-    import os
-    os.environ["TORCH_DISABLE_TORCH_COMPILE"] = "1"
-    print("==================== Training starting. ====================")
-
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
@@ -138,6 +134,7 @@ if __name__ == "__main__":
     parser.add_argument('--resx', type=int, default=128, help="[train_velocity only] Resolution in x direction.")
     parser.add_argument('--resy', type=int, default=192, help="[train_velocity only] Resolution in y direction.")
     parser.add_argument('--resz', type=int, default=128, help="[train_velocity only] Resolution in z direction.")
+    parser.add_argument('--use_rgb', action='store_true', help="[General] Use RGB for training.")
     args = parser.parse_args()
 
     if args.select_ckpt and args.checkpoint is None:
@@ -151,6 +148,7 @@ if __name__ == "__main__":
         depth_size=args.depth_size,
         ratio=args.ratio,
         mid_ckpts_iters=args.mid_ckpt_iters,
+        use_rgb=args.use_rgb,
     )
 
     if args.option == "train_density_only":

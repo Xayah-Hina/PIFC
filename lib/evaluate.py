@@ -19,6 +19,8 @@ class EvaluationConfig:
 
     ratio: float
 
+    use_rgb: bool = True
+
     def __post_init__(self):
         import yaml
         import os
@@ -39,7 +41,7 @@ class EvaluationConfig:
 
 class _EvaluationModelBase:
     def __init__(self, config):
-        self._load_model(config.target_device)
+        self._load_model(config.target_device, config.use_rgb)
         self._load_validation_dataset(config.validation_videos, config.validation_camera_calibrations, config.ratio, config.target_device, config.target_dtype)
         self.load_ckpt(config.pretrained_ckpt, config.target_device)
 
@@ -48,9 +50,12 @@ class _EvaluationModelBase:
         self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = config.s_w2s, config.s2w, config.s_scale, config.s_min, config.s_max
         self.ratio = config.ratio
 
-    def _load_model(self, target_device: torch.device):
+    def _load_model(self, target_device: torch.device, use_rgb):
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
-        self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
+        if use_rgb:
+            self.model_d = NeRFSmall_c(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
+        else:
+            self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
         self.encoder_v = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
         self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
 
@@ -75,6 +80,7 @@ class _EvaluationModelBase:
         self.height = int(self.height_validation[0].item())
         self.near = float(self.near_validation[0].item())
         self.far = float(self.far_validation[0].item())
+
 
 class EvaluationRenderFrame(_EvaluationModelBase):
     def __init__(self, config: EvaluationConfig):
@@ -118,18 +124,27 @@ class EvaluationRenderFrame(_EvaluationModelBase):
                 hidden = self.encoder_d(batch_points_time_flat_filtered)
                 raw_d = self.model_d(hidden)
                 raw_flat = torch.zeros([batch_size_current * depth_size], device=self.target_device, dtype=self.target_dtype)
-                raw_d_flat = raw_d.view(-1)
+                raw_d_flat = raw_d[..., 0].view(-1)
                 raw_flat = raw_flat.masked_scatter(bbox_mask, raw_d_flat)
                 raw = raw_flat.reshape(batch_size_current, depth_size, 1)
 
                 dists_cat = torch.cat([batch_dist_vals, torch.tensor([1e10], device=self.target_device).expand(batch_dist_vals[..., :1].shape)], -1)  # [batch_size_current, N_depths]
                 dists_final = dists_cat * torch.norm(batch_rays_d[..., None, :], dim=-1)  # [batch_size_current, N_depths]
 
-                rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
                 noise = 0.
                 alpha = 1. - torch.exp(-torch.nn.functional.relu(raw[..., -1] + noise) * dists_final)
                 weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1), device=self.target_device), 1. - alpha + 1e-10], -1), -1)[:, :-1]
-                rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
+
+                if raw_d.shape[-1] == 1:
+                    rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
+                    rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
+                else:
+                    rgb_flat = torch.zeros([batch_size_current * depth_size, 3], device=self.target_device, dtype=self.target_dtype)
+                    rgb_valid_flat = raw_d[..., 1:].reshape(-1, 3)
+                    for i in range(3):
+                        rgb_flat[:, i] = rgb_flat[:, i].masked_scatter(bbox_mask, rgb_valid_flat[:, i])
+                    rgb = torch.sigmoid(rgb_flat.reshape(batch_size_current, depth_size, 3))
+                    rgb_map = torch.sum(weights[..., None] * rgb, dim=-2)
 
                 final_rgb_map_list.append(rgb_map)
 

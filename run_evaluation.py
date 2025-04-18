@@ -54,6 +54,7 @@ if __name__ == "__main__":
         target_device=torch.device(args.device),
         target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
         ratio=0.5,
+        use_rgb=checkpoint['config']['use_rgb'],
     )
 
     if args.option == "evaluate_render_frame":
