@@ -123,7 +123,7 @@ if __name__ == "__main__":
     parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_joint'], required=True, help="[Required][General] Choose the operation to execute.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
-    parser.add_argument('--scene', type=str, choices=['hyfluid', 'plume_1'], default="hyfluid", help="[General] Scene to run.")
+    parser.add_argument('--scene', type=str, choices=['hyfluid', 'plume_1', 'plume_color_1'], default="hyfluid", help="[General] Scene to run.")
     parser.add_argument('--batch_size', type=int, default=1024, help="[General] Batch size for training.")
     parser.add_argument('--depth_size', type=int, default=512, help="[General] Depth size for training.")
     parser.add_argument('--ratio', type=float, default=0.5, help="[General] Ratio of resolution resampling.")
@@ -134,7 +134,6 @@ if __name__ == "__main__":
     parser.add_argument('--resx', type=int, default=128, help="[train_velocity only] Resolution in x direction.")
     parser.add_argument('--resy', type=int, default=192, help="[train_velocity only] Resolution in y direction.")
     parser.add_argument('--resz', type=int, default=128, help="[train_velocity only] Resolution in z direction.")
-    parser.add_argument('--use_rgb', action='store_true', help="[General] Use RGB for training.")
     args = parser.parse_args()
 
     if args.select_ckpt and args.checkpoint is None:
@@ -148,7 +147,7 @@ if __name__ == "__main__":
         depth_size=args.depth_size,
         ratio=args.ratio,
         mid_ckpts_iters=args.mid_ckpt_iters,
-        use_rgb=args.use_rgb,
+        use_rgb=args.scene == "plume_color_1",
     )
 
     if args.option == "train_density_only":
