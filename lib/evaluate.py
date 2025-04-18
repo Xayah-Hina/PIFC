@@ -172,7 +172,7 @@ class EvaluationResimulation(_EvaluationModelBase):
             batch_size = 64 * 64 * 64
             for i in range(0, input_xyzt_flat.shape[0], batch_size):
                 input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
-                raw_d_flat_batch = self.model_d(self.encoder_d(input_xyzt_flat_batch))
+                raw_d_flat_batch = self.model_d(self.encoder_d(input_xyzt_flat_batch))[..., 0]
                 raw_d_flat_list.append(raw_d_flat_batch)
             raw_d_flat = torch.cat(raw_d_flat_list, dim=0)
             raw_d_flat[~self.bbox_mask_flat] = 0.0
