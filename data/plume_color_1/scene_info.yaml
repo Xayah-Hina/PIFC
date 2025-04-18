@@ -6,7 +6,7 @@ training_videos:
   - data/plume_color_1/train04.mp4
 
 validation_videos:
-  - data/plume_1/train02.mp4
+  - data/plume_color_1/train03.mp4
 
 training_camera_calibrations:
   - data/plume_color_1/export_cam1.npz
@@ -16,7 +16,7 @@ training_camera_calibrations:
   - data/plume_color_1/export_cam5.npz
 
 validation_camera_calibrations:
-  - data/plume_1/export_cam2.npz
+  - data/plume_color_1/export_cam3.npz
 
 voxel_transform:
   - [ 1.0, 0.0, 0.0, -0.4 ]
