@@ -63,11 +63,15 @@ if __name__ == "__main__":
             import imageio.v3 as imageio
 
             if args.frame == -1:
+                rgb8_list = []
                 for f in tqdm.tqdm(list(reversed(range(120))), desc="Rendering frames", unit="frame"):
                     rgb_map_final = model.render_frame(args.batch_ray_size, args.depth_size, f)
                     rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
                     os.makedirs(f'ckpt/{scene_name}/render_frame', exist_ok=True)
                     imageio.imwrite(os.path.join(f'ckpt/{scene_name}/render_frame', 'rgb_{:03d}.png'.format(f)), rgb8)
+                    rgb8_list.append(rgb8)
+                import imageio.v2 as imageiov2
+                imageiov2.mimsave(os.path.join(f'ckpt/{scene_name}/render_frame', 'video_rgb.png'.format(f)), rgb8_list, fps=24)
             else:
                 rgb_map_final = model.render_frame(args.batch_ray_size, args.depth_size, args.frame)
                 rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
