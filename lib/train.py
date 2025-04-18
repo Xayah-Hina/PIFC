@@ -205,7 +205,11 @@ class TrainDensityModel(_TrainModelBase):
             rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
             rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
         else:
-            rgb = torch.sigmoid(raw_d[..., 1:])
+            rgb_flat = torch.zeros([batch_size_current * depth_size, 3], device=self.target_device, dtype=self.target_dtype)
+            rgb_valid_flat = raw_d[..., 1:].reshape(-1, 3)
+            for i in range(3):
+                rgb_flat[:, i] = rgb_flat[:, i].masked_scatter(bbox_mask, rgb_valid_flat[:, i])
+            rgb = torch.sigmoid(rgb_flat.reshape(batch_size_current, depth_size, 3))
             rgb_map = torch.sum(weights[..., None] * rgb, dim=-2)
 
         img_loss = torch.nn.functional.mse_loss(rgb_map, batch_target_pixels)
