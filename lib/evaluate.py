@@ -19,7 +19,10 @@ class EvaluationConfig:
 
     ratio: float
 
-    use_rgb: bool = True
+    use_rgb: bool
+
+    frame_start: int
+    frame_end: int
 
     def __post_init__(self):
         import yaml
@@ -42,7 +45,7 @@ class EvaluationConfig:
 class _EvaluationModelBase:
     def __init__(self, config):
         self._load_model(config.target_device, config.use_rgb)
-        self._load_validation_dataset(config.validation_videos, config.validation_camera_calibrations, config.ratio, config.target_device, config.target_dtype)
+        self._load_validation_dataset(config.validation_videos, config.validation_camera_calibrations, config.frame_start, config.frame_end, config.ratio, config.target_device, config.target_dtype)
         self.load_ckpt(config.pretrained_ckpt, config.target_device)
 
         self.target_device = config.target_device
@@ -71,9 +74,9 @@ class _EvaluationModelBase:
         except Exception as e:
             print(f"Error loading model: {e}")
 
-    def _load_validation_dataset(self, validation_videos, validation_camera_calibrations, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
+    def _load_validation_dataset(self, validation_videos, validation_camera_calibrations, frame_start: int, frame_end: int, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
         assert len(validation_videos) == len(validation_camera_calibrations), "Number of videos and camera calibrations must match."
-        self.videos_data_validation = load_videos_data(*validation_videos, ratio=ratio, dtype=target_dtype).to(target_device)
+        self.videos_data_validation = load_videos_data(*validation_videos, ratio=ratio, dtype=target_dtype)[frame_start:frame_end].to(target_device)
         self.poses_validation, self.focals_validation, self.width_validation, self.height_validation, self.near_validation, self.far_validation = load_cameras_data(*validation_camera_calibrations, ratio=ratio, device=target_device, dtype=target_dtype)
 
         self.width = int(self.width_validation[0].item())

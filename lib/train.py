@@ -25,6 +25,9 @@ class TrainConfig:
 
     use_rgb: bool
 
+    frame_start: int
+    frame_end: int
+
     def __post_init__(self):
         import yaml
         import os
@@ -51,8 +54,8 @@ class _TrainModelBase:
 
     def _reinitialize(self, config):
         self._load_model(config.target_device, config.use_rgb)
-        self._load_training_dataset(config.training_videos, config.training_camera_calibrations, config.ratio, config.target_device, config.target_dtype)
-        self._load_validation_dataset(config.validation_videos, config.validation_camera_calibrations, config.ratio, config.target_device, config.target_dtype)
+        self._load_training_dataset(config.training_videos, config.training_camera_calibrations, config.frame_start, config.frame_end, config.ratio, config.target_device, config.target_dtype)
+        self._load_validation_dataset(config.validation_videos, config.validation_camera_calibrations, config.frame_start, config.frame_end, config.ratio, config.target_device, config.target_dtype)
 
         self.target_device = config.target_device
         self.target_dtype = config.target_dtype
@@ -88,14 +91,14 @@ class _TrainModelBase:
         main_scheduler_v = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_v, gamma=gamma)
         self.scheduler_v = torch.optim.lr_scheduler.SequentialLR(self.optimizer_v, schedulers=[warmup_v, main_scheduler_v], milestones=[2000])
 
-    def _load_training_dataset(self, training_videos, training_camera_calibrations, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
+    def _load_training_dataset(self, training_videos, training_camera_calibrations, frame_start: int, frame_end: int, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
         assert len(training_videos) == len(training_camera_calibrations), "Number of videos and camera calibrations must match."
-        self.videos_data = load_videos_data(*training_videos, ratio=ratio, dtype=target_dtype)
+        self.videos_data = load_videos_data(*training_videos, ratio=ratio, dtype=target_dtype)[frame_start:frame_end]
         self.poses, self.focals, self.width, self.height, self.near, self.far = load_cameras_data(*training_camera_calibrations, ratio=ratio, device=target_device, dtype=target_dtype)
 
-    def _load_validation_dataset(self, validation_videos, validation_camera_calibrations, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
+    def _load_validation_dataset(self, validation_videos, validation_camera_calibrations, frame_start: int, frame_end: int, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
         assert len(validation_videos) == len(validation_camera_calibrations), "Number of videos and camera calibrations must match."
-        self.videos_data_validation = load_videos_data(*validation_videos, ratio=ratio, dtype=target_dtype).to(target_device)
+        self.videos_data_validation = load_videos_data(*validation_videos, ratio=ratio, dtype=target_dtype).to(target_device)[frame_start:frame_end]
         self.poses_validation, self.focals_validation, self.width_validation, self.height_validation, self.near_validation, self.far_validation = load_cameras_data(*validation_camera_calibrations, ratio=ratio, device=target_device, dtype=target_dtype)
 
     def _next_batch(self, batch_size: int):
