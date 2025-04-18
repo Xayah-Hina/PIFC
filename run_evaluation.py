@@ -47,6 +47,7 @@ if __name__ == "__main__":
     scene_name = checkpoint['config']['scene_name']
     frame_start = int(checkpoint['config']['frame_start'])
     frame_end = int(checkpoint['config']['frame_end'])
+    total_frames = frame_end - frame_start
     print(f"==================== Evaluating: {scene_name} ====================")
     print(f"Checkpoint Information: {checkpoint['config']}, frame_start: {frame_start}, frame_end: {frame_end}")
 
@@ -85,15 +86,15 @@ if __name__ == "__main__":
     if args.option == "evaluate_resimulation":
         with torch.no_grad():
             model = EvaluationResimulation(evaluation_config, args.resx, args.resy, args.resz)
-            dt = 1.0 / 119.0
+            dt = 1.0 / float(total_frames - 1)
             source_height = 0.15
-            den = model.sample_density_grid(0)
+            den = model.sample_density_grid(frame_normalized=0.0)
             source = den
             for step in tqdm.trange(frame_start, frame_end):
                 if step > frame_start:
-                    vel = model.sample_velocity_grid(step - 1)
+                    vel = model.sample_velocity_grid(frame_normalized=float(step - 1) / float(total_frames))
                     vel_sim_confined = world2sim_rot(vel, model.s_w2s, model.s_scale)
-                    source = model.sample_density_grid(step)
+                    source = model.sample_density_grid(frame_normalized=float(step) / float(total_frames))
                     den = model.advect_density(den, vel_sim_confined, source, dt, model.coord_3d_sim[..., 1] > source_height)
                 lib.utils.houdini.export_density_field(
                     den,
@@ -107,14 +108,14 @@ if __name__ == "__main__":
         if args.frame == -1:
             for _ in tqdm.trange(frame_start, frame_end):
                 lib.utils.houdini.export_density_field(
-                    den=model.sample_density_grid(frame=_),
+                    den=model.sample_density_grid(frame_normalized=float(_) / float(total_frames)),
                     save_path=f"ckpt/{scene_name}/export",
                     surname=f"density_{_ + 1:03d}",
                     bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
                 )
         else:
             lib.utils.houdini.export_density_field(
-                den=model.sample_density_grid(frame=args.frame),
+                den=model.sample_density_grid(frame_normalized=float(args.frame) / float(total_frames)),
                 save_path=f"ckpt/{scene_name}/export",
                 surname=f"density_{args.frame:03d}",
                 bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
@@ -125,14 +126,14 @@ if __name__ == "__main__":
         if args.frame == -1:
             for _ in tqdm.trange(frame_start, frame_end):
                 lib.utils.houdini.export_velocity_field(
-                    vel=model.sample_velocity_grid(frame=_),
+                    vel=model.sample_velocity_grid(frame_normalized=float(_) / float(total_frames)),
                     save_path=f"ckpt/{scene_name}/export",
                     surname=f"velocity_{_ + 1:03d}",
                     bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
                 )
         else:
             lib.utils.houdini.export_velocity_field(
-                vel=model.sample_velocity_grid(frame=args.frame),
+                vel=model.sample_velocity_grid(frame_normalized=float(args.frame) / float(total_frames)),
                 save_path=f"ckpt/{scene_name}/export",
                 surname=f"velocity_{args.frame:03d}",
                 bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),

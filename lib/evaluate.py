@@ -90,13 +90,13 @@ class EvaluationRenderFrame(_EvaluationModelBase):
         super().__init__(config)
 
     @torch.compile
-    def render_frame(self, batch_ray_size: int, depth_size: int, frame: int):
+    def render_frame(self, batch_ray_size: int, depth_size: int, frame_normalized: float):
         pose = self.poses_validation[0]
         focal = self.focals_validation[0]
         with torch.no_grad():
             poses = pose.unsqueeze(0)
             focals = focal.unsqueeze(0)
-            frame_time = torch.tensor(frame / 120.0, device=self.target_device, dtype=self.target_dtype)
+            frame_time = torch.tensor(frame_normalized, device=self.target_device, dtype=self.target_dtype)
 
             dirs, _, _ = shuffle_uv(focals=focals, width=self.width, height=self.height, randomize=False, device=self.target_device, dtype=self.target_dtype)
             rays_d = torch.einsum('nij,nhwj->nhwi', poses[:, :3, :3], dirs)  # (1, H, W, 3)
@@ -168,9 +168,9 @@ class EvaluationResimulation(_EvaluationModelBase):
         self.resx, self.resy, self.resz = resx, resy, resz
 
     @torch.compile
-    def sample_density_grid(self, frame):
+    def sample_density_grid(self, frame_normalized):
         with torch.no_grad():
-            input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
+            input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * frame_normalized], dim=-1).reshape(-1, 4)
             raw_d_flat_list = []
             batch_size = 64 * 64 * 64
             for i in range(0, input_xyzt_flat.shape[0], batch_size):
@@ -183,9 +183,9 @@ class EvaluationResimulation(_EvaluationModelBase):
             return raw_d
 
     @torch.compile
-    def sample_velocity_grid(self, frame):
+    def sample_velocity_grid(self, frame_normalized):
         with torch.no_grad():
-            input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
+            input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * frame_normalized], dim=-1).reshape(-1, 4)
             raw_vel_flat_list = []
             batch_size = 64 * 64 * 64
             for i in range(0, input_xyzt_flat.shape[0], batch_size):
@@ -219,9 +219,9 @@ class EvaluationSpatialState(_EvaluationModelBase):
         self.resx, self.resy, self.resz = resx, resy, resz
 
     @torch.compile
-    def sample_valid_density_grid(self, frame):
+    def sample_valid_density_grid(self, frame_normalized):
         with torch.no_grad():
-            input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * float(frame / 120.0)], dim=-1).reshape(-1, 4)
+            input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * frame_normalized], dim=-1).reshape(-1, 4)
             raw_d_flat_list = []
             batch_size = 64 * 64 * 64
             for i in range(0, input_xyzt_flat.shape[0], batch_size):
