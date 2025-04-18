@@ -54,7 +54,7 @@ if __name__ == "__main__":
         target_device=torch.device(args.device),
         target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
         ratio=0.5,
-        use_rgb=args.scene == "plume_color_1",
+        use_rgb=scene_name == "plume_color_1",
     )
 
     if args.option == "evaluate_render_frame":
