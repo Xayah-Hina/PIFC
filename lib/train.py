@@ -23,6 +23,8 @@ class TrainConfig:
     # ckpt parameters
     mid_ckpts_iters: int
 
+    use_rgb: bool = False
+
     def __post_init__(self):
         import yaml
         import os
@@ -48,7 +50,7 @@ class _TrainModelBase:
         self._reinitialize(config)
 
     def _reinitialize(self, config):
-        self._load_model(config.target_device)
+        self._load_model(config.target_device, config.use_rgb)
         self._load_training_dataset(config.training_videos, config.training_camera_calibrations, config.ratio, config.target_device, config.target_dtype)
         self._load_validation_dataset(config.validation_videos, config.validation_camera_calibrations, config.ratio, config.target_device, config.target_dtype)
 
@@ -63,9 +65,12 @@ class _TrainModelBase:
 
         self.config = config  # Don't use is unless save_ckpt
 
-    def _load_model(self, target_device: torch.device):
+    def _load_model(self, target_device: torch.device, use_rgb):
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
-        self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
+        if use_rgb:
+            self.model_d = NeRFSmall_c(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
+        else:
+            self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
         self.optimizer_d = torch.optim.RAdam([{'params': self.model_d.parameters(), 'weight_decay': 1e-6}, {'params': self.encoder_d.parameters(), 'eps': 1e-15}], lr=0.001, betas=(0.9, 0.99))
         self.encoder_v = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
         self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
@@ -185,18 +190,24 @@ class TrainDensityModel(_TrainModelBase):
         hidden = self.encoder_d(batch_points_time_flat_filtered)
         raw_d = self.model_d(hidden)
         raw_flat = torch.zeros([batch_size_current * depth_size], device=self.target_device, dtype=self.target_dtype)
-        raw_d_flat = raw_d.view(-1)
+        raw_d_flat = raw_d[..., 0].view(-1)
         raw_flat = raw_flat.masked_scatter(bbox_mask, raw_d_flat)
         raw = raw_flat.reshape(batch_size_current, depth_size, 1)
 
         dists_cat = torch.cat([batch_dist_vals, torch.tensor([1e10], device=self.target_device).expand(batch_dist_vals[..., :1].shape)], -1)  # [batch_size_current, N_depths]
         dists_final = dists_cat * torch.norm(batch_rays_d[..., None, :], dim=-1)  # [batch_size_current, N_depths]
 
-        rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
         noise = 0.
         alpha = 1. - torch.exp(-torch.nn.functional.relu(raw[..., -1] + noise) * dists_final)
         weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1), device=self.target_device), 1. - alpha + 1e-10], -1), -1)[:, :-1]
-        rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
+
+        if raw_d.shape[-1] == 1:
+            rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
+            rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
+        else:
+            rgb = torch.sigmoid(raw_d[..., 1:])
+            rgb_map = torch.sum(weights[..., None] * rgb, dim=-2)
+
         img_loss = torch.nn.functional.mse_loss(rgb_map, batch_target_pixels)
 
         return img_loss
