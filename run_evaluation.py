@@ -22,7 +22,7 @@ def open_file_dialog():
 
 if __name__ == "__main__":
     print("==================== Evaluation starting. ====================")
-
+    torch.set_float32_matmul_precision('high')
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
@@ -100,7 +100,8 @@ if __name__ == "__main__":
                     den,
                     save_path=f"ckpt/{scene_name}/resimulation",
                     surname=f"density_{step:03d}",
-                    bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
+                    local2world=model.s2w,
+                    scale=model.s_scale,
                 )
 
     if args.option == "export_density_field":
@@ -111,14 +112,16 @@ if __name__ == "__main__":
                     den=model.sample_density_grid(frame_normalized=float(_) / float(total_frames)),
                     save_path=f"ckpt/{scene_name}/export",
                     surname=f"density_{_ + 1:03d}",
-                    bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
+                    local2world=model.s2w,
+                    scale=model.s_scale,
                 )
         else:
             lib.utils.houdini.export_density_field(
                 den=model.sample_density_grid(frame_normalized=float(args.frame) / float(total_frames)),
                 save_path=f"ckpt/{scene_name}/export",
                 surname=f"density_{args.frame:03d}",
-                bbox=(0.0, 0.0, 0.0, model.s_scale[0].item(), model.s_scale[1].item(), model.s_scale[2].item()),
+                local2world=model.s2w,
+                scale=model.s_scale,
             )
 
     if args.option == "export_velocity_field":

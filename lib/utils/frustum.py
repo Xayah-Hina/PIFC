@@ -206,3 +206,43 @@ def world2sim_rot(pts_world, s_w2s, s_scale):
     pts_sim_ = torch.matmul(s_w2s[:3, :3], pts_world[..., None]).squeeze(-1)
     pts_sim = pts_sim_ / (s_scale)  # 3.target to 2.simulation
     return pts_sim
+
+
+class OccupancyGrid:
+    def __init__(self, local2world, scale, resx, resy, resz, target_device, target_dtype):
+        self.R = local2world[:3, :3]
+        self.t = local2world[:3, 3]
+        self.s = scale
+        self.resx = resx
+        self.resy = resy
+        self.resz = resz
+
+        self.occupancy = torch.zeros((resx, resy, resz), device=target_device, dtype=torch.bool)
+
+        self.bbox_corner_local = torch.tensor([[0, 0, 0], [1, 1, 1]], device=target_device, dtype=target_dtype)
+        self.bbox_corner_world = self.local2world(self.bbox_corner_local)
+
+    def record_trained_points(self, points_world):
+        with torch.no_grad():
+            points_local = self.world2local(points_world)
+            valid_mask = (points_local >= 0) & (points_local < 1)
+            valid_mask = valid_mask.all(dim=1)
+            points_local = points_local[valid_mask]
+            idx = (points_local * torch.tensor([self.resx, self.resy, self.resz], device=points_world.device)).long()
+            x, y, z = idx[:, 0], idx[:, 1], idx[:, 2]
+            x = torch.clamp(x, 0, self.resx - 1)
+            y = torch.clamp(y, 0, self.resy - 1)
+            z = torch.clamp(z, 0, self.resz - 1)
+            self.occupancy[x, y, z] = True
+
+    def local2world(self, points_local):
+        scaled = points_local * self.s
+        rotated = torch.einsum('ij,nj->ni', self.R, scaled)
+        translated = rotated + self.t
+        return translated
+
+    def world2local(self, points_world):
+        translated = points_world - self.t
+        rotated = torch.einsum('ij,nj->ni', self.R.T, translated)
+        scaled = rotated / self.s
+        return scaled

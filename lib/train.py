@@ -48,46 +48,6 @@ class TrainConfig:
         self.s_scale = self.voxel_scale.expand([3])
 
 
-class DebugOccupancyGrid:
-    def __init__(self, config: TrainConfig, resx, resy, resz):
-        self.R = config.s2w[:3, :3]
-        self.t = config.s2w[:3, 3]
-        self.s = config.s_scale
-        self.resx = resx
-        self.resy = resy
-        self.resz = resz
-
-        self.occupancy = torch.zeros((resx, resy, resz), device=config.target_device, dtype=torch.bool)
-
-        self.bbox_corner_local = torch.tensor([[0, 0, 0], [1, 1, 1]], device=config.target_device, dtype=config.target_dtype)
-        self.bbox_corner_world = self.local2world(self.bbox_corner_local)
-
-    def record_trained_points(self, points_world):
-        with torch.no_grad():
-            points_local = self.world2local(points_world)
-            valid_mask = (points_local >= 0) & (points_local < 1)
-            valid_mask = valid_mask.all(dim=1)
-            points_local = points_local[valid_mask]
-            idx = (points_local * torch.tensor([self.resx, self.resy, self.resz], device=points_world.device)).long()
-            x, y, z = idx[:, 0], idx[:, 1], idx[:, 2]
-            x = torch.clamp(x, 0, self.resx - 1)
-            y = torch.clamp(y, 0, self.resy - 1)
-            z = torch.clamp(z, 0, self.resz - 1)
-            self.occupancy[x, y, z] = True
-
-    def local2world(self, points_local):
-        scaled = points_local * self.s
-        rotated = torch.einsum('ij,nj->ni', self.R, scaled)
-        translated = rotated + self.t
-        return translated
-
-    def world2local(self, points_world):
-        translated = points_world - self.t
-        rotated = torch.einsum('ij,nj->ni', self.R.T, translated)
-        scaled = rotated / self.s
-        return scaled
-
-
 class _TrainModelBase:
     def __init__(self, config: TrainConfig):
         self._reinitialize(config)
@@ -108,9 +68,10 @@ class _TrainModelBase:
 
         self.config = config  # Don't use is unless save_ckpt
 
-        self.debug_occupancy_grid = DebugOccupancyGrid(config, 30, 30, 30)
+        self.debug_occupancy_grid = OccupancyGrid(config.s2w, config.s_scale, 30, 30, 30, config.target_device, config.target_dtype)
 
     def _load_model(self, target_device: torch.device, use_rgb):
+        print("[>>> Initializing model... <<<]")
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
         if use_rgb:
             self.model_d = NeRFSmall_c(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
@@ -132,16 +93,21 @@ class _TrainModelBase:
         warmup_v = torch.optim.lr_scheduler.LinearLR(self.optimizer_v, start_factor=0.01, total_iters=2000)
         main_scheduler_v = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_v, gamma=gamma)
         self.scheduler_v = torch.optim.lr_scheduler.SequentialLR(self.optimizer_v, schedulers=[warmup_v, main_scheduler_v], milestones=[2000])
+        print("[>>> Model initialized. <<<]")
 
     def _load_training_dataset(self, training_videos, training_camera_calibrations, frame_start: int, frame_end: int, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
+        print("[>>> Initializing training dataset...")
         assert len(training_videos) == len(training_camera_calibrations), "Number of videos and camera calibrations must match."
         self.videos_data = load_videos_data(*training_videos, ratio=ratio, dtype=target_dtype)[frame_start:frame_end]
         self.poses, self.focals, self.width, self.height, self.near, self.far = load_cameras_data(*training_camera_calibrations, ratio=ratio, device=target_device, dtype=target_dtype)
+        print("[>>> Training dataset initialized. <<<]")
 
     def _load_validation_dataset(self, validation_videos, validation_camera_calibrations, frame_start: int, frame_end: int, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
+        print("[>>> Initializing validation dataset... <<<]")
         assert len(validation_videos) == len(validation_camera_calibrations), "Number of videos and camera calibrations must match."
         self.videos_data_validation = load_videos_data(*validation_videos, ratio=ratio, dtype=target_dtype).to(target_device)[frame_start:frame_end]
         self.poses_validation, self.focals_validation, self.width_validation, self.height_validation, self.near_validation, self.far_validation = load_cameras_data(*validation_camera_calibrations, ratio=ratio, device=target_device, dtype=target_dtype)
+        print("[>>> Validation dataset initialized. <<<]")
 
     def _next_batch(self, batch_size: int):
         if self.generator is None:
@@ -259,8 +225,7 @@ class TrainDensityModel(_TrainModelBase):
 
         img_loss = torch.nn.functional.mse_loss(rgb_map, batch_target_pixels)
 
-        debug_info = {}
-        debug_info['batch_points'] = batch_points.detach().clone()
+        debug_info = {'batch_points': batch_points.detach().clone()}
 
         return img_loss, debug_info
 

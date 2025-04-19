@@ -1,4 +1,5 @@
 import hou
+import torch
 import os
 
 
@@ -6,27 +7,37 @@ import os
 ### You can find Hython under Houdini Installed dir
 ### Eg. "C:/Program Files/Side Effects Software/Houdini 20.5.550/bin/hython.exe"
 
-def export_density_field(den, save_path, surname, bbox):
+def export_density_field(den, save_path, surname, local2world, scale):
+    transform_matrix = hou.Matrix4([v for row in local2world.tolist() for v in row])
+    scale_matrix = hou.hmath.buildScale(scale.tolist())
+    final_matrix = transform_matrix * scale_matrix
+
     resx, resy, resz = den.shape[0], den.shape[1], den.shape[2]
     geo = hou.Geometry()
-    vol = geo.createVolume(resx, resy, resz, hou.BoundingBox(*bbox))
+    vol = geo.createVolume(resx, resy, resz)
     vol.setAllVoxels(den.cpu().numpy().flatten().tolist())
+    vol.setTransform(final_matrix)
     os.makedirs(save_path, exist_ok=True)
     output_path = os.path.join(save_path, f"{surname}.bgeo.sc")
     geo.saveToFile(output_path)
     print(f"Save {output_path}")
 
 
-def export_velocity_field(vel, save_path, surname, bbox):
+def export_velocity_field(vel, save_path, surname, local2world, scale):
+    transform_matrix = hou.Matrix4([v for row in local2world.tolist() for v in row])
+    scale_matrix = hou.hmath.buildScale(scale.tolist())
+    final_matrix = transform_matrix * scale_matrix
+
     resx, resy, resz = vel.shape[0], vel.shape[1], vel.shape[2]
     geo = hou.Geometry()
     vel_np = vel.cpu().numpy()
     name_attrib = geo.addAttrib(hou.attribType.Prim, "name", "default")
     for i, name in enumerate(['vel.x', 'vel.y', 'vel.z']):
-        vol = geo.createVolume(resx, resy, resz, hou.BoundingBox(*bbox))
+        vol = geo.createVolume(resx, resy, resz)
         vol.setAttribValue(name_attrib, name)
         data_flat = vel_np[..., i].flatten().tolist()
         vol.setAllVoxels(data_flat)
+        vol.setTransform(final_matrix)
     os.makedirs(save_path, exist_ok=True)
     output_path = os.path.join(save_path, f"{surname}.bgeo.sc")
     geo.saveToFile(output_path)
@@ -36,20 +47,31 @@ def export_velocity_field(vel, save_path, surname, bbox):
 def create_voxel_boxes(occupancy_grid, save_path, surname):
     geo = hou.Geometry()
     scale = (1.0 / occupancy_grid.shape[0], 1.0 / occupancy_grid.shape[1], 1.0 / occupancy_grid.shape[2])
+    target_device = occupancy_grid.R.device
+    target_dtype = occupancy_grid.R.dtype
 
-    print(f"Create voxel boxes... occupancy_grid shape: {occupancy_grid.shape}")
+    print(f"Creating voxel boxes... (occupancy_grid shape: {occupancy_grid.shape})")
     for i in range(occupancy_grid.shape[0]):
         for j in range(occupancy_grid.shape[1]):
             for k in range(occupancy_grid.shape[2]):
                 if occupancy_grid[i, j, k]:
-                    point_000 = hou.Vector3(i * scale[0], j * scale[1], k * scale[2])
-                    point_001 = hou.Vector3((i + 1) * scale[0], j * scale[1], k * scale[2])
-                    point_010 = hou.Vector3(i * scale[0], (j + 1) * scale[1], k * scale[2])
-                    point_011 = hou.Vector3((i + 1) * scale[0], (j + 1) * scale[1], k * scale[2])
-                    point_100 = hou.Vector3(i * scale[0], j * scale[1], (k + 1) * scale[2])
-                    point_101 = hou.Vector3((i + 1) * scale[0], j * scale[1], (k + 1) * scale[2])
-                    point_110 = hou.Vector3(i * scale[0], (j + 1) * scale[1], (k + 1) * scale[2])
-                    point_111 = hou.Vector3((i + 1) * scale[0], (j + 1) * scale[1], (k + 1) * scale[2])
+                    point_000_torch = occupancy_grid.local2world(torch.tensor([i * scale[0], j * scale[1], k * scale[2]], device=target_device, dtype=target_dtype))
+                    point_001_torch = occupancy_grid.local2world(torch.tensor([(i + 1) * scale[0], j * scale[1], k * scale[2]], device=target_device, dtype=target_dtype))
+                    point_010_torch = occupancy_grid.local2world(torch.tensor([i * scale[0], (j + 1) * scale[1], k * scale[2]], device=target_device, dtype=target_dtype))
+                    point_011_torch = occupancy_grid.local2world(torch.tensor([(i + 1) * scale[0], (j + 1) * scale[1], k * scale[2]], device=target_device, dtype=target_dtype))
+                    point_100_torch = occupancy_grid.local2world(torch.tensor([i * scale[0], j * scale[1], (k + 1) * scale[2]], device=target_device, dtype=target_dtype))
+                    point_101_torch = occupancy_grid.local2world(torch.tensor([(i + 1) * scale[0], j * scale[1], (k + 1) * scale[2]], device=target_device, dtype=target_dtype))
+                    point_110_torch = occupancy_grid.local2world(torch.tensor([i * scale[0], (j + 1) * scale[1], (k + 1) * scale[2]], device=target_device, dtype=target_dtype))
+                    point_111_torch = occupancy_grid.local2world(torch.tensor([(i + 1) * scale[0], (j + 1) * scale[1], (k + 1) * scale[2]], device=target_device, dtype=target_dtype))
+
+                    point_000 = hou.Vector3(point_000_torch.cpu()[0].item(), point_000_torch.cpu()[1].item(), point_000_torch.cpu()[2].item())
+                    point_001 = hou.Vector3(point_001_torch.cpu()[0].item(), point_001_torch.cpu()[1].item(), point_001_torch.cpu()[2].item())
+                    point_010 = hou.Vector3(point_010_torch.cpu()[0].item(), point_010_torch.cpu()[1].item(), point_010_torch.cpu()[2].item())
+                    point_011 = hou.Vector3(point_011_torch.cpu()[0].item(), point_011_torch.cpu()[1].item(), point_011_torch.cpu()[2].item())
+                    point_100 = hou.Vector3(point_100_torch.cpu()[0].item(), point_100_torch.cpu()[1].item(), point_100_torch.cpu()[2].item())
+                    point_101 = hou.Vector3(point_101_torch.cpu()[0].item(), point_101_torch.cpu()[1].item(), point_101_torch.cpu()[2].item())
+                    point_110 = hou.Vector3(point_110_torch.cpu()[0].item(), point_110_torch.cpu()[1].item(), point_110_torch.cpu()[2].item())
+                    point_111 = hou.Vector3(point_111_torch.cpu()[0].item(), point_111_torch.cpu()[1].item(), point_111_torch.cpu()[2].item())
 
                     point_000_hou = geo.createPoint()
                     point_000_hou.setPosition(point_000)

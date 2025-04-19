@@ -122,6 +122,8 @@ def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
 
 
 if __name__ == "__main__":
+    print("==================== Training starting... ====================")
+    torch.set_float32_matmul_precision('high')
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
