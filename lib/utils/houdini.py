@@ -46,21 +46,24 @@ def export_velocity_field(vel, save_path, surname, local2world, scale):
 
 def create_voxel_boxes(occupancy_grid, save_path, surname, local2world, scale):
     geo = hou.Geometry()
-    scale = (1.0 / occupancy_grid.shape[0], 1.0 / occupancy_grid.shape[1], 1.0 / occupancy_grid.shape[2])
+    scale_i = (1.0 / occupancy_grid.shape[0], 1.0 / occupancy_grid.shape[1], 1.0 / occupancy_grid.shape[2])
+    transform_matrix = hou.Matrix4([v for row in local2world.tolist() for v in row])
+    scale_matrix = hou.hmath.buildScale(scale.tolist())
+    final_matrix = transform_matrix * scale_matrix
 
     print(f"Creating voxel boxes... (occupancy_grid shape: {occupancy_grid.shape})")
     for i in range(occupancy_grid.shape[0]):
         for j in range(occupancy_grid.shape[1]):
             for k in range(occupancy_grid.shape[2]):
                 if occupancy_grid[i, j, k]:
-                    point_000 = hou.Vector3(i * scale[0], j * scale[1], k * scale[2])
-                    point_001 = hou.Vector3((i + 1) * scale[0], j * scale[1], k * scale[2])
-                    point_010 = hou.Vector3(i * scale[0], (j + 1) * scale[1], k * scale[2])
-                    point_011 = hou.Vector3(i * scale[0], (j + 1) * scale[1], (k + 1) * scale[2])
-                    point_100 = hou.Vector3((i + 1) * scale[0], j * scale[1], (k + 1) * scale[2])
-                    point_101 = hou.Vector3((i + 1) * scale[0], (j + 1) * scale[1], (k + 1) * scale[2])
-                    point_110 = hou.Vector3((i + 1) * scale[0], (j + 1) * scale[1], k * scale[2])
-                    point_111 = hou.Vector3((i + 1) * scale[0], (j + 1) * scale[1], (k + 1) * scale[2])
+                    point_000 = hou.Vector3(i * scale_i[0], j * scale_i[1], k * scale_i[2]) * final_matrix.transposed()
+                    point_001 = hou.Vector3((i + 1) * scale_i[0], j * scale_i[1], k * scale_i[2]) * final_matrix.transposed()
+                    point_010 = hou.Vector3(i * scale_i[0], (j + 1) * scale_i[1], k * scale_i[2]) * final_matrix.transposed()
+                    point_011 = hou.Vector3(i * scale_i[0], (j + 1) * scale_i[1], (k + 1) * scale_i[2]) * final_matrix.transposed()
+                    point_100 = hou.Vector3((i + 1) * scale_i[0], j * scale_i[1], (k + 1) * scale_i[2]) * final_matrix.transposed()
+                    point_101 = hou.Vector3((i + 1) * scale_i[0], (j + 1) * scale_i[1], (k + 1) * scale_i[2]) * final_matrix.transposed()
+                    point_110 = hou.Vector3((i + 1) * scale_i[0], (j + 1) * scale_i[1], k * scale_i[2]) * final_matrix.transposed()
+                    point_111 = hou.Vector3((i + 1) * scale_i[0], (j + 1) * scale_i[1], (k + 1) * scale_i[2]) * final_matrix.transposed()
 
                     point_000_hou = geo.createPoint()
                     point_000_hou.setPosition(point_000)

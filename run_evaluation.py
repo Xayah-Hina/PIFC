@@ -117,7 +117,7 @@ if __name__ == "__main__":
                     local2world=model.s2w,
                     scale=model.s_scale,
                 )
-                lib.utils.houdini.create_voxel_boxes(model_occupancy.sample_density_grid(frame_normalized=float(_) / float(total_frames)) > 1e-5, f"ckpt/{scene_name}/export", f"occupancy_grid_valid_{_ + 1:03d}", config.s2w, config.s_scale)
+                lib.utils.houdini.create_voxel_boxes(model_occupancy.sample_density_grid(frame_normalized=float(_) / float(total_frames)) > 1e-5, f"ckpt/{scene_name}/export", f"occupancy_grid_valid_{_ + 1:03d}", evaluation_config.s2w, evaluation_config.s_scale)
         else:
             lib.utils.houdini.export_density_field(
                 den=model.sample_density_grid(frame_normalized=float(args.frame) / float(total_frames)),
@@ -126,7 +126,7 @@ if __name__ == "__main__":
                 local2world=model.s2w,
                 scale=model.s_scale,
             )
-            lib.utils.houdini.create_voxel_boxes(model_occupancy.sample_density_grid(frame_normalized=float(_) / float(total_frames)) > 1e-5, f"ckpt/{scene_name}/export", f"occupancy_grid_valid_{args.frame:03d}", config.s2w, config.s_scale)
+            lib.utils.houdini.create_voxel_boxes(model_occupancy.sample_density_grid(frame_normalized=float(args.frame) / float(total_frames)) > 1e-5, f"ckpt/{scene_name}/export", f"occupancy_grid_valid_{args.frame:03d}", evaluation_config.s2w, evaluation_config.s_scale)
 
     if args.option == "export_velocity_field":
         model = EvaluationResimulation(evaluation_config, args.resx, args.resy, args.resz)
