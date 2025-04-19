@@ -46,7 +46,7 @@ def export_velocity_field(vel, save_path, surname, local2world, scale):
 
 def create_voxel_boxes(occupancy_grid, save_path, surname):
     geo = hou.Geometry()
-    scale = (1.0 / occupancy_grid.shape[0], 1.0 / occupancy_grid.shape[1], 1.0 / occupancy_grid.shape[2])
+    scale = (1.0 / occupancy_grid.occupancy.shape[0], 1.0 / occupancy_grid.occupancy.shape[1], 1.0 / occupancy_grid.occupancy.shape[2])
     target_device = occupancy_grid.R.device
     target_dtype = occupancy_grid.R.dtype
 
