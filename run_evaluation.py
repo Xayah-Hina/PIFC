@@ -204,6 +204,9 @@ if __name__ == "__main__":
                 'bbox_max_list_smoothed': bbox_max_list_smoothed.tolist(),
                 'bbox_min_list_smoothed_floor': bbox_min_list_smoothed_floor.tolist(),
                 'bbox_max_list_smoothed_ceil': bbox_max_list_smoothed_ceil.tolist(),
+                'resx': args.resx,
+                'resy': args.resy,
+                'resz': args.resz,
             }, f, default_flow_style=None)
 
         sample_idx = 0

@@ -482,3 +482,6 @@ bbox_min_list_smoothed_floor:
 - [15, 0, 15]
 - [15, 0, 15]
 - [14, 0, 14]
+resx: 128
+resy: 192
+resz: 128

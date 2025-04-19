@@ -307,6 +307,25 @@ class TrainVelocityModel(_TrainModelBase):
         return vel_loss, nseloss_fine, proj_loss, min_vel_reg
 
 
+class TrainVelocityLCCModel(TrainVelocityModel):
+    def __init__(self, config: TrainConfig, lcc_path: str):
+        with open(lcc_path, 'r') as f:
+            import yaml
+            lcc_info = yaml.safe_load(f)
+            self.bbox_min_list_smoothed = torch.tensor(lcc_info['bbox_min_list_smoothed'], device=config.target_device, dtype=config.target_dtype)
+            self.bbox_max_list_smoothed = torch.tensor(lcc_info['bbox_max_list_smoothed'], device=config.target_device, dtype=config.target_dtype)
+            self.bbox_min_list_smoothed_floor = torch.tensor(lcc_info['bbox_min_list_smoothed_floor'], device=config.target_device, dtype=torch.int32)
+            self.bbox_max_list_smoothed_ceil = torch.tensor(lcc_info['bbox_max_list_smoothed_ceil'], device=config.target_device, dtype=torch.int32)
+            self.resx, self.resy, self.resz = int(lcc_info['resx']), int(lcc_info['resy']), int(lcc_info['resz'])
+        super().__init__(config, self.resx, self.resy, self.resz)
+
+    def lcc_loss(self, batch_points):
+        pass
+
+    def forward(self, batch_size: int):
+        pass
+
+
 class TrainJointModel(_TrainModelBase):
     def __init__(self, config: TrainConfig):
         super().__init__(config)

@@ -51,11 +51,6 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
         final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
         saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
         writer.close()
-        # try:
-        #     import lib.utils.houdini as houdini
-        #     houdini.create_voxel_boxes(model.debug_occupancy_grid.occupancy, final_ckpt_path, "occupancy_grid_trained", config.s2w, config.s_scale)
-        # except Exception as e:
-        #     print("Failed to create voxel boxes:", e)
         return saved_ckpt
 
 
@@ -88,6 +83,10 @@ def train_velocity(config: TrainConfig, pretrain_density: int, resx: int, resy: 
         saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
         writer.close()
         return saved_ckpt
+
+
+def train_velocity_lcc(config: TrainConfig, lcc_path: str):
+    model = TrainVelocityLCCModel(config, lcc_path)
 
 
 def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
@@ -127,7 +126,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
-    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_joint'], required=True, help="[Required][General] Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_velocity_lcc', 'train_joint'], required=True, help="[Required][General] Choose the operation to execute.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
     parser.add_argument('--scene', type=str, choices=['hyfluid', 'plume_1', 'plume_color_1'], default="hyfluid", help="[General] Scene to run.")
@@ -175,6 +174,12 @@ if __name__ == "__main__":
             resz=args.resz,
             total_iter=args.total_iter,
             pretrained_ckpt=args.checkpoint,
+        )
+
+    if args.option == "train_velocity_lcc":
+        train_velocity_lcc(
+            config=train_config,
+            lcc_path='data/hyfluid/hyfluid_lcc.yaml',
         )
 
     if args.option == "train_joint":
