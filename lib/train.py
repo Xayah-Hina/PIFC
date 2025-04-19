@@ -48,6 +48,46 @@ class TrainConfig:
         self.s_scale = self.voxel_scale.expand([3])
 
 
+class DebugOccupancyGrid:
+    def __init__(self, config: TrainConfig, resx, resy, resz):
+        self.R = config.s2w[:3, :3]
+        self.t = config.s2w[:3, 3]
+        self.s = config.s_scale
+        self.resx = resx
+        self.resy = resy
+        self.resz = resz
+
+        self.occupancy = torch.zeros((resx, resy, resz), device=config.target_device, dtype=torch.bool)
+
+        self.bbox_corner_local = torch.tensor([[0, 0, 0], [1, 1, 1]], device=config.target_device, dtype=config.target_dtype)
+        self.bbox_corner_world = self.local2world(self.bbox_corner_local)
+
+    def record_trained_points(self, points_world):
+        with torch.no_grad():
+            points_local = self.world2local(points_world)
+            valid_mask = (points_local >= 0) & (points_local < 1)
+            valid_mask = valid_mask.all(dim=1)
+            points_local = points_local[valid_mask]
+            idx = (points_local * torch.tensor([self.resx, self.resy, self.resz], device=points_world.device)).long()
+            x, y, z = idx[:, 0], idx[:, 1], idx[:, 2]
+            x = torch.clamp(x, 0, self.resx - 1)
+            y = torch.clamp(y, 0, self.resy - 1)
+            z = torch.clamp(z, 0, self.resz - 1)
+            self.occupancy[x, y, z] = True
+
+    def local2world(self, points_local):
+        scaled = points_local * self.s
+        rotated = torch.einsum('ij,nj->ni', self.R, scaled)
+        translated = rotated + self.t
+        return translated
+
+    def world2local(self, points_world):
+        translated = points_world - self.t
+        rotated = torch.einsum('ij,nj->ni', self.R.T, translated)
+        scaled = rotated / self.s
+        return scaled
+
+
 class _TrainModelBase:
     def __init__(self, config: TrainConfig):
         self._reinitialize(config)
@@ -67,6 +107,8 @@ class _TrainModelBase:
         self.global_step = 0
 
         self.config = config  # Don't use is unless save_ckpt
+
+        self.debug_occupancy_grid = DebugOccupancyGrid(config, 100, 100, 100)
 
     def _load_model(self, target_device: torch.device, use_rgb):
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
@@ -217,12 +259,17 @@ class TrainDensityModel(_TrainModelBase):
 
         img_loss = torch.nn.functional.mse_loss(rgb_map, batch_target_pixels)
 
-        return img_loss
+        debug_info = {}
+        debug_info['batch_points'] = batch_points.detach().clone()
+
+        return img_loss, debug_info
 
     def forward(self, batch_size: int, depth_size: int):
         self.optimizer_d.zero_grad()
         batch_indices, batch_rays_o, batch_rays_d = self._next_batch(batch_size)
-        img_loss = self.image_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
+        img_loss, debug_info = self.image_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
+        if self.debug_occupancy_grid is not None:
+            self.debug_occupancy_grid.record_trained_points(debug_info['batch_points'].reshape(-1, 3))
         img_loss.backward()
         self.optimizer_d.step()
         self.scheduler_d.step()

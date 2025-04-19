@@ -1,3 +1,5 @@
+import numpy as np
+
 from lib.train import *
 import tqdm
 
@@ -51,6 +53,11 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
         final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
         saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
         writer.close()
+        try:
+            import lib.utils.houdini as houdini
+            houdini.create_voxel_boxes(model.debug_occupancy_grid.occupancy, final_ckpt_path, "occupancy_grid")
+        except Exception as e:
+            print("Failed to create voxel boxes:", e)
         return saved_ckpt
 
 
@@ -127,7 +134,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=1024, help="[General] Batch size for training.")
     parser.add_argument('--depth_size', type=int, default=512, help="[General] Depth size for training.")
     parser.add_argument('--ratio', type=float, default=0.5, help="[General] Ratio of resolution resampling.")
-    parser.add_argument('--total_iter', type=int, default=10000, help="[General] Total iterations for training.")
+    parser.add_argument('--total_iter', type=int, default=1000, help="[General] Total iterations for training.")
     parser.add_argument('--select_ckpt', action='store_true', help="[General] Select a pretrained checkpoint file.")
     parser.add_argument('--checkpoint', type=str, default=None, help="[General] Load a pretrained checkpoint.")
     parser.add_argument('--mid_ckpt_iters', type=int, default=-1, help="[General] Save mid checkpoints during training.")
