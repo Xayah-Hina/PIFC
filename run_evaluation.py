@@ -26,7 +26,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
-    parser.add_argument('--option', type=str, choices=['evaluate_render_frame', 'evaluate_resimulation', 'export_density_field', 'export_velocity_field', 'evaluate_density_details', 'evaluate_max_component_bounding_box'], required=True, help="[Required][General] Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=['evaluate_render_frame', 'evaluate_resimulation', 'export_density_field', 'export_velocity_field', 'evaluate_density_details', 'evaluate_lcc_bounding_box'], required=True, help="[Required][General] Choose the operation to execute.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
     parser.add_argument('--select_ckpt', action='store_true', help="[General] Select a pretrained checkpoint file.")
@@ -167,7 +167,8 @@ if __name__ == "__main__":
         plt.tight_layout()
         plt.show()
 
-    if args.option == "evaluate_max_component_bounding_box":
+    if args.option == "evaluate_lcc_bounding_box":
+        # Largest Connected Component (LCC) Bounding Box
 
         model = EvaluationDiscreteSpatial(evaluation_config, args.resx, args.resy, args.resz)
         den_list = []
@@ -193,6 +194,17 @@ if __name__ == "__main__":
 
         bbox_min_list_smoothed = kalman_smooth_bbox(bbox_min_list)
         bbox_max_list_smoothed = kalman_smooth_bbox(bbox_max_list)
+        bbox_min_list_smoothed_floor = np.maximum(np.floor(bbox_min_list_smoothed), 0).astype(np.int32)
+        bbox_max_list_smoothed_ceil = np.minimum(np.ceil(bbox_max_list_smoothed), np.array([args.resx - 1, args.resy - 1, args.resz - 1])).astype(np.int32)
+        import yaml
+
+        with open(f"{scene_name}_lcc.yaml", "w") as f:
+            yaml.dump({
+                'bbox_min_list_smoothed': bbox_min_list_smoothed.tolist(),
+                'bbox_max_list_smoothed': bbox_max_list_smoothed.tolist(),
+                'bbox_min_list_smoothed_floor': bbox_min_list_smoothed_floor.tolist(),
+                'bbox_max_list_smoothed_ceil': bbox_max_list_smoothed_ceil.tolist(),
+            }, f, default_flow_style=None)
 
         sample_idx = 0
         for _ in tqdm.trange(frame_start, frame_end):
@@ -202,8 +214,8 @@ if __name__ == "__main__":
                 surname=f"density_bbox_{_ + 1:03d}",
                 local2world=model.s2w,
                 scale=model.s_scale,
-                bbox_min=bbox_min_list_smoothed[sample_idx],
-                bbox_max=bbox_max_list_smoothed[sample_idx],
+                bbox_min=bbox_min_list_smoothed_floor[sample_idx],
+                bbox_max=bbox_max_list_smoothed_ceil[sample_idx],
             )
             sample_idx += 1
 

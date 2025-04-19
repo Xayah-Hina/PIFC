@@ -225,7 +225,6 @@ class EvaluationDiscreteSpatial(_EvaluationModelBase):
         y_min, y_max = max(0, y_min - extrapolate), min(self.resy - 1, y_max + extrapolate)
         x_min, x_max = max(0, x_min - extrapolate), min(self.resx - 1, x_max + extrapolate)
 
-        # 最终的 Bounding Box
         bbox_min = [x_min, y_min, z_min]
         bbox_max = [x_max, y_max, z_max]
 
