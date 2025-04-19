@@ -26,7 +26,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
-    parser.add_argument('--option', type=str, choices=['evaluate_render_frame', 'evaluate_resimulation', 'export_density_field', 'export_velocity_field'], required=True, help="[Required][General] Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=['evaluate_render_frame', 'evaluate_resimulation', 'export_density_field', 'export_velocity_field', 'evaluate_density_details'], required=True, help="[Required][General] Choose the operation to execute.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
     parser.add_argument('--select_ckpt', action='store_true', help="[General] Select a pretrained checkpoint file.")
@@ -45,8 +45,8 @@ if __name__ == "__main__":
 
     checkpoint = torch.load(args.checkpoint, map_location=args.device, weights_only=True)
     scene_name = checkpoint['config']['scene_name']
-    frame_start = int(checkpoint['config']['frame_start'])
-    frame_end = int(checkpoint['config']['frame_end'])
+    frame_start = 0
+    frame_end = 120
     total_frames = frame_end - frame_start
     print(f"==================== Evaluating: {scene_name} ====================")
     print(f"Checkpoint Information: {checkpoint['config']}, frame_start: {frame_start}, frame_end: {frame_end}")
@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
     if args.option == "evaluate_resimulation":
         with torch.no_grad():
-            model = EvaluationResimulation(evaluation_config, args.resx, args.resy, args.resz)
+            model = EvaluationDiscreteSpatial(evaluation_config, args.resx, args.resy, args.resz)
             dt = 1.0 / float(total_frames - 1)
             source_height = 0.15
             den = model.sample_density_grid(frame_normalized=0.0)
@@ -106,8 +106,8 @@ if __name__ == "__main__":
 
     if args.option == "export_density_field":
         resx_occupancy, resy_occupancy, resz_occupancy = 30, 30, 30
-        model = EvaluationResimulation(evaluation_config, args.resx, args.resy, args.resz)
-        model_occupancy = EvaluationResimulation(evaluation_config, resx_occupancy, resy_occupancy, resz_occupancy)
+        model = EvaluationDiscreteSpatial(evaluation_config, args.resx, args.resy, args.resz)
+        model_occupancy = EvaluationDiscreteSpatial(evaluation_config, resx_occupancy, resy_occupancy, resz_occupancy)
         if args.frame == -1:
             for _ in tqdm.trange(frame_start, frame_end):
                 lib.utils.houdini.export_density_field(
@@ -129,7 +129,7 @@ if __name__ == "__main__":
             lib.utils.houdini.create_voxel_boxes(model_occupancy.sample_density_grid(frame_normalized=float(args.frame) / float(total_frames)) > 1e-5, f"ckpt/{scene_name}/export", f"occupancy_grid_valid_{args.frame:03d}", evaluation_config.s2w, evaluation_config.s_scale)
 
     if args.option == "export_velocity_field":
-        model = EvaluationResimulation(evaluation_config, args.resx, args.resy, args.resz)
+        model = EvaluationDiscreteSpatial(evaluation_config, args.resx, args.resy, args.resz)
         if args.frame == -1:
             for _ in tqdm.trange(frame_start, frame_end):
                 lib.utils.houdini.export_velocity_field(
@@ -147,5 +147,24 @@ if __name__ == "__main__":
                 local2world=model.s2w,
                 scale=model.s_scale,
             )
+
+    if args.option == "evaluate_density_details":
+        model = EvaluationDiscreteSpatial(evaluation_config, args.resx, args.resy, args.resz)
+        occupied_ratios = []
+        for _ in tqdm.trange(frame_start, frame_end):
+            den = model.sample_density_grid(frame_normalized=float(_) / float(total_frames))
+            ratio = torch.sum(den > 1e-5).item() / (den.shape[0] * den.shape[1] * den.shape[2])
+            occupied_ratios.append(ratio)
+
+        import matplotlib.pyplot as plt
+
+        plt.figure(figsize=(10, 4))
+        plt.plot(range(frame_start, frame_end), occupied_ratios, marker='o')
+        plt.xlabel("Frame")
+        plt.ylabel("Occupied Ratio")
+        plt.title(f"Scene: {scene_name} - Occupied Ratio over Frames")
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
 
     print("==================== Evaluation completed. ====================")

@@ -155,7 +155,7 @@ class EvaluationRenderFrame(_EvaluationModelBase):
             return final_rgb_map
 
 
-class EvaluationResimulation(_EvaluationModelBase):
+class EvaluationDiscreteSpatial(_EvaluationModelBase):
     def __init__(self, config: EvaluationConfig, resx: int, resy: int, resz: int):
         super().__init__(config)
 
