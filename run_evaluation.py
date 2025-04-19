@@ -10,7 +10,7 @@ def open_file_dialog():
         root = Tk()
         root.withdraw()
         root.attributes("-topmost", True)
-        file_path = filedialog.askopenfilename(title="Select a checkpoint file", initialdir="ckpt", filetypes=[("Checkpoint files", "*.tar")])
+        file_path = filedialog.askopenfilename(title="Select a checkpoint file", initialdir="history", filetypes=[("Checkpoint files", "*.tar")])
         root.destroy()
 
         if file_path and os.path.isfile(file_path):
