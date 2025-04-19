@@ -45,8 +45,8 @@ if __name__ == "__main__":
 
     checkpoint = torch.load(args.checkpoint, map_location=args.device, weights_only=True)
     scene_name = checkpoint['config']['scene_name']
-    frame_start = 0
-    frame_end = 120
+    frame_start = int(checkpoint['config']['frame_start'])
+    frame_end = int(checkpoint['config']['frame_end'])
     total_frames = frame_end - frame_start
     print(f"==================== Evaluating: {scene_name} ====================")
     print(f"Checkpoint Information: {checkpoint['config']}, frame_start: {frame_start}, frame_end: {frame_end}")

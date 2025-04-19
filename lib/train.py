@@ -68,8 +68,6 @@ class _TrainModelBase:
 
         self.config = config  # Don't use is unless save_ckpt
 
-        self.debug_occupancy_grid = OccupancyGrid(config.s2w, config.s_scale, 30, 30, 30, config.target_device, config.target_dtype)
-
     def _load_model(self, target_device: torch.device, use_rgb):
         print("[>>> Initializing model... <<<]")
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
@@ -84,7 +82,7 @@ class _TrainModelBase:
 
         import math
         target_lr_ratio = 0.0001
-        gamma = math.exp(math.log(target_lr_ratio) / 100000)
+        gamma = math.exp(math.log(target_lr_ratio) / 20000)
 
         warmup_d = torch.optim.lr_scheduler.LinearLR(self.optimizer_d, start_factor=0.01, total_iters=2000)
         main_scheduler_d = torch.optim.lr_scheduler.ExponentialLR(self.optimizer_d, gamma=gamma)
@@ -225,16 +223,12 @@ class TrainDensityModel(_TrainModelBase):
 
         img_loss = torch.nn.functional.mse_loss(rgb_map, batch_target_pixels)
 
-        debug_info = {'batch_points': batch_points.detach().clone()}
-
-        return img_loss, debug_info
+        return img_loss
 
     def forward(self, batch_size: int, depth_size: int):
         self.optimizer_d.zero_grad()
         batch_indices, batch_rays_o, batch_rays_d = self._next_batch(batch_size)
-        img_loss, debug_info = self.image_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
-        if self.debug_occupancy_grid is not None:
-            self.debug_occupancy_grid.record_trained_points(debug_info['batch_points'].reshape(-1, 3))
+        img_loss = self.image_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
         img_loss.backward()
         self.optimizer_d.step()
         self.scheduler_d.step()

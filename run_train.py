@@ -51,11 +51,11 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
         final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
         saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
         writer.close()
-        try:
-            import lib.utils.houdini as houdini
-            houdini.create_voxel_boxes(model.debug_occupancy_grid.occupancy, final_ckpt_path, "occupancy_grid_trained", config.s2w, config.s_scale)
-        except Exception as e:
-            print("Failed to create voxel boxes:", e)
+        # try:
+        #     import lib.utils.houdini as houdini
+        #     houdini.create_voxel_boxes(model.debug_occupancy_grid.occupancy, final_ckpt_path, "occupancy_grid_trained", config.s2w, config.s_scale)
+        # except Exception as e:
+        #     print("Failed to create voxel boxes:", e)
         return saved_ckpt
 
 
@@ -156,7 +156,7 @@ if __name__ == "__main__":
         mid_ckpts_iters=args.mid_ckpt_iters,
         use_rgb=args.scene == "plume_color_1",
         frame_start=0,
-        frame_end=120,
+        frame_end=60,
     )
 
     if args.option == "train_density_only":
