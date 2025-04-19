@@ -1,5 +1,4 @@
 import hou
-import torch
 import os
 
 
@@ -42,16 +41,13 @@ def export_density_field_with_bbox(den, save_path, surname, local2world, scale, 
 
     geo = hou.Geometry()
 
-    # 归一化后变换到 world space
     def voxel_to_world(x, y, z):
         pos = hou.Vector3(float(x) / resx, float(y) / resy, float(z) / resz)
         return pos * final_matrix.transposed()
 
-    # 解包 bbox 坐标
-    x0, y0, z0 = bbox_min
-    x1, y1, z1 = bbox_max
+    z0, y0, x0 = bbox_min  # but, why?
+    z1, y1, x1 = bbox_max  # but, why?
 
-    # 8 个点
     p000 = geo.createPoint()
     p000.setPosition(voxel_to_world(x0, y0, z0))  # min, min, min
     p100 = geo.createPoint()
