@@ -26,7 +26,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
-    parser.add_argument('--option', type=str, choices=['evaluate_render_frame', 'evaluate_resimulation', 'export_density_field', 'export_velocity_field', 'evaluate_density_details'], required=True, help="[Required][General] Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=['evaluate_render_frame', 'evaluate_resimulation', 'export_density_field', 'export_velocity_field', 'evaluate_density_details', 'evaluate_max_component_bounding_box'], required=True, help="[Required][General] Choose the operation to execute.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
     parser.add_argument('--select_ckpt', action='store_true', help="[General] Select a pretrained checkpoint file.")
@@ -166,5 +166,45 @@ if __name__ == "__main__":
         plt.grid(True)
         plt.tight_layout()
         plt.show()
+
+    if args.option == "evaluate_max_component_bounding_box":
+
+        model = EvaluationDiscreteSpatial(evaluation_config, args.resx, args.resy, args.resz)
+        den_list = []
+        bbox_min_list = []
+        bbox_max_list = []
+        for _ in tqdm.trange(frame_start, frame_end):
+            bbox_min, bbox_max, den = model.max_component_bounding_box(frame_normalized=float(_) / float(total_frames), threshold=1e-5, extrapolate=0)
+            den_list.append(den)
+            bbox_min_list.append(bbox_min)
+            bbox_max_list.append(bbox_max)
+
+
+        def kalman_smooth_bbox(bbox_list):
+            from pykalman import KalmanFilter
+            arr = np.array(bbox_list)  # (N, 3)
+            kf = KalmanFilter(initial_state_mean=arr[0],
+                              n_dim_obs=3,
+                              em_vars=['transition_covariance', 'observation_covariance'])
+            kf = kf.em(arr, n_iter=10)
+            smoothed, _ = kf.smooth(arr)
+            return smoothed
+
+
+        bbox_min_list_smoothed = kalman_smooth_bbox(bbox_min_list)
+        bbox_max_list_smoothed = kalman_smooth_bbox(bbox_max_list)
+
+        sample_idx = 0
+        for _ in tqdm.trange(frame_start, frame_end):
+            lib.utils.houdini.export_density_field_with_bbox(
+                den=den_list[sample_idx],
+                save_path=f"ckpt/{scene_name}/export",
+                surname=f"density_bbox_{_ + 1:03d}",
+                local2world=model.s2w,
+                scale=model.s_scale,
+                bbox_min=bbox_min_list_smoothed[sample_idx],
+                bbox_max=bbox_max_list_smoothed[sample_idx],
+            )
+            sample_idx += 1
 
     print("==================== Evaluation completed. ====================")

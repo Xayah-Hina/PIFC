@@ -204,3 +204,29 @@ class EvaluationDiscreteSpatial(_EvaluationModelBase):
             den[~mask_to_sim] = source[~mask_to_sim]
             den[~self.bbox_mask] *= 0.
             return den
+
+    def max_component_bounding_box(self, frame_normalized, threshold, extrapolate):
+        den = self.sample_density_grid(frame_normalized)
+        occupancy_mask = (den > threshold).squeeze(-1).cpu().numpy()
+        from scipy.ndimage import label, find_objects
+        structure = np.ones((3, 3, 3))
+        labeled, num_features = label(occupancy_mask, structure=structure)
+        sizes = np.bincount(labeled.ravel())
+        sizes[0] = 0  # remove background
+        max_label = sizes.argmax()
+        main_region = (labeled == max_label)
+        slices = find_objects(main_region.astype(int))[0]
+
+        z_min, z_max = slices[2].start, slices[2].stop
+        y_min, y_max = slices[1].start, slices[1].stop
+        x_min, x_max = slices[0].start, slices[0].stop
+
+        z_min, z_max = max(0, z_min - extrapolate), min(self.resz - 1, z_max + extrapolate)
+        y_min, y_max = max(0, y_min - extrapolate), min(self.resy - 1, y_max + extrapolate)
+        x_min, x_max = max(0, x_min - extrapolate), min(self.resx - 1, x_max + extrapolate)
+
+        # 最终的 Bounding Box
+        bbox_min = [x_min, y_min, z_min]
+        bbox_max = [x_max, y_max, z_max]
+
+        return bbox_min, bbox_max, den
