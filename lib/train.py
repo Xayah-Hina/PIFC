@@ -96,7 +96,7 @@ class _TrainModelBase:
         print("[>>> Model initialized. <<<]")
 
     def _load_training_dataset(self, training_videos, training_camera_calibrations, frame_start: int, frame_end: int, ratio: float, target_device: torch.device, target_dtype: torch.dtype):
-        print("[>>> Initializing training dataset...")
+        print("[>>> Initializing training dataset... <<<]")
         assert len(training_videos) == len(training_camera_calibrations), "Number of videos and camera calibrations must match."
         self.videos_data = load_videos_data(*training_videos, ratio=ratio, dtype=target_dtype)[frame_start:frame_end]
         self.poses, self.focals, self.width, self.height, self.near, self.far = load_cameras_data(*training_camera_calibrations, ratio=ratio, device=target_device, dtype=target_dtype)
