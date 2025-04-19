@@ -108,7 +108,6 @@ if __name__ == "__main__":
         resx_occupancy, resy_occupancy, resz_occupancy = 30, 30, 30
         model = EvaluationResimulation(evaluation_config, args.resx, args.resy, args.resz)
         model_occupancy = EvaluationResimulation(evaluation_config, resx_occupancy, resy_occupancy, resz_occupancy)
-        occupancy_grid_valid = OccupancyGrid(evaluation_config.s2w, evaluation_config.s_scale, resx_occupancy, resy_occupancy, resz_occupancy, evaluation_config.target_device, evaluation_config.target_dtype)
         if args.frame == -1:
             for _ in tqdm.trange(frame_start, frame_end):
                 lib.utils.houdini.export_density_field(
@@ -118,8 +117,7 @@ if __name__ == "__main__":
                     local2world=model.s2w,
                     scale=model.s_scale,
                 )
-                occupancy_grid_valid.occupancy = model.sample_density_grid(frame_normalized=float(_) / float(total_frames)) > 1e-5
-                lib.utils.houdini.create_voxel_boxes(occupancy_grid_valid, f"ckpt/{scene_name}/export", f"occupancy_grid_valid_{_ + 1:03d}")
+                lib.utils.houdini.create_voxel_boxes(model_occupancy.sample_density_grid(frame_normalized=float(_) / float(total_frames)) > 1e-5, f"ckpt/{scene_name}/export", f"occupancy_grid_valid_{_ + 1:03d}", config.s2w, config.s_scale)
         else:
             lib.utils.houdini.export_density_field(
                 den=model.sample_density_grid(frame_normalized=float(args.frame) / float(total_frames)),
@@ -128,8 +126,7 @@ if __name__ == "__main__":
                 local2world=model.s2w,
                 scale=model.s_scale,
             )
-            occupancy_grid_valid.occupancy = model.sample_density_grid(frame_normalized=float(args.frame) / float(total_frames)) > 1e-5
-            lib.utils.houdini.create_voxel_boxes(occupancy_grid_valid, f"ckpt/{scene_name}/export", f"occupancy_grid_valid_{args.frame:03d}")
+            lib.utils.houdini.create_voxel_boxes(model_occupancy.sample_density_grid(frame_normalized=float(_) / float(total_frames)) > 1e-5, f"ckpt/{scene_name}/export", f"occupancy_grid_valid_{args.frame:03d}", config.s2w, config.s_scale)
 
     if args.option == "export_velocity_field":
         model = EvaluationResimulation(evaluation_config, args.resx, args.resy, args.resz)

@@ -53,7 +53,7 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
         writer.close()
         try:
             import lib.utils.houdini as houdini
-            houdini.create_voxel_boxes(model.debug_occupancy_grid.occupancy, final_ckpt_path, "occupancy_grid_trained")
+            houdini.create_voxel_boxes(model.debug_occupancy_grid.occupancy, final_ckpt_path, "occupancy_grid_trained", config.s2w, config.s_scale)
         except Exception as e:
             print("Failed to create voxel boxes:", e)
         return saved_ckpt
