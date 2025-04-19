@@ -108,7 +108,7 @@ class _TrainModelBase:
 
         self.config = config  # Don't use is unless save_ckpt
 
-        self.debug_occupancy_grid = DebugOccupancyGrid(config, 100, 100, 100)
+        self.debug_occupancy_grid = DebugOccupancyGrid(config, 30, 30, 30)
 
     def _load_model(self, target_device: torch.device, use_rgb):
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
