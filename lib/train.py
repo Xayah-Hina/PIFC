@@ -507,6 +507,22 @@ class TrainJointLCCModel(_TrainModelBase):
             self.bbox_max_list_smoothed_ceil = torch.tensor(lcc_info['bbox_max_list_smoothed_ceil'], device=config.target_device, dtype=torch.int32)
         super().__init__(config)
 
+    def lcc_filter(self, batch_points_world, frame_normalized):
+        assert isinstance(frame_normalized, torch.Tensor), "frame_normalized must be a torch.Tensor"
+        assert frame_normalized.numel() == 1, "frame_normalized must be a single value tensor"
+        frame_floor = torch.floor(frame_normalized).long()
+        frame_ceil = torch.ceil(frame_normalized).long()
+        t = frame_normalized - frame_floor
+        bbox_min_smoothed = (1 - t) * self.bbox_min_list_smoothed[frame_floor] + t * self.bbox_min_list_smoothed[frame_ceil]
+        bbox_max_smoothed = (1 - t) * self.bbox_max_list_smoothed[frame_floor] + t * self.bbox_max_list_smoothed[frame_ceil]
+        bbox_min_smoothed_normalized = bbox_min_smoothed
+        bbox_max_smoothed_normalized = bbox_max_smoothed
+
+        batch_points_local = world2sim(batch_points_world, self.s_w2s, self.s_scale)
+        lcc_mask = (batch_points_local >= bbox_min_smoothed_normalized) & (batch_points_local <= bbox_max_smoothed_normalized)
+        lcc_mask = lcc_mask.all(dim=-1)
+        return lcc_mask
+
     def joint_lcc_loss(self, batch_indices, batch_rays_o, batch_rays_d, depth_size: int, near: float, far: float):
         def g(x):
             return self.model_d(x)
