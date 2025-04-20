@@ -1,7 +1,6 @@
 import hou
-import os
-
 import torch
+import os
 
 
 ### Please use Hython instead of common Python
