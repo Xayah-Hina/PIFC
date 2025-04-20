@@ -1,6 +1,8 @@
 import hou
 import os
 
+import torch
+
 
 ### Please use Hython instead of common Python
 ### You can find Hython under Houdini Installed dir
@@ -36,6 +38,20 @@ def export_density_field_with_bbox(den, save_path, surname, local2world, scale, 
 
     os.makedirs(save_path, exist_ok=True)
     output_path = os.path.join(save_path, f"{surname}.bgeo.sc")
+    geo.saveToFile(output_path)
+    print(f"Save {output_path}")
+
+    den_filtered = torch.zeros_like(den)
+    x0, y0, z0 = [int(v) for v in bbox_min]
+    x1, y1, z1 = [int(v) for v in bbox_max]
+    den_filtered[x0:x1, y0:y1, z0:z1, :] = den[x0:x1, y0:y1, z0:z1, :]
+
+    geo = hou.Geometry()
+    vol = geo.createVolume(resx, resy, resz, hou.BoundingBox(0.0, 0.0, 0.0, 1.0, 1.0, 1.0))
+    vol.setAllVoxels(den_filtered.cpu().numpy().flatten().tolist())
+    vol.setTransform(final_matrix)
+    os.makedirs(save_path, exist_ok=True)
+    output_path = os.path.join(save_path, f"{surname}_filtered.bgeo.sc")
     geo.saveToFile(output_path)
     print(f"Save {output_path}")
 

@@ -217,7 +217,7 @@ if __name__ == "__main__":
         mid_ckpts_iters=args.mid_ckpt_iters,
         use_rgb=args.scene == "plume_color_1",
         frame_start=0,
-        frame_end=60,
+        frame_end=120,
     )
 
     if args.option == "train_density_only":
