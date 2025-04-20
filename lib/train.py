@@ -1,3 +1,5 @@
+from sympy.physics.units import velocity
+
 from .utils.dataset import *
 from .utils.frustum import *
 from .model.encoder_hyfluid import *
@@ -312,18 +314,94 @@ class TrainVelocityLCCModel(TrainVelocityModel):
         with open(lcc_path, 'r') as f:
             import yaml
             lcc_info = yaml.safe_load(f)
-            self.bbox_min_list_smoothed = torch.tensor(lcc_info['bbox_min_list_smoothed'], device=config.target_device, dtype=config.target_dtype)
-            self.bbox_max_list_smoothed = torch.tensor(lcc_info['bbox_max_list_smoothed'], device=config.target_device, dtype=config.target_dtype)
+            self.resx, self.resy, self.resz = int(lcc_info['resx']), int(lcc_info['resy']), int(lcc_info['resz'])
+            res_f = torch.tensor([self.resx, self.resy, self.resz], device=config.target_device, dtype=torch.float32)
+            self.bbox_min_list_smoothed = torch.tensor(lcc_info['bbox_min_list_smoothed'], device=config.target_device, dtype=config.target_dtype) / res_f
+            self.bbox_max_list_smoothed = torch.tensor(lcc_info['bbox_max_list_smoothed'], device=config.target_device, dtype=config.target_dtype) / res_f
             self.bbox_min_list_smoothed_floor = torch.tensor(lcc_info['bbox_min_list_smoothed_floor'], device=config.target_device, dtype=torch.int32)
             self.bbox_max_list_smoothed_ceil = torch.tensor(lcc_info['bbox_max_list_smoothed_ceil'], device=config.target_device, dtype=torch.int32)
-            self.resx, self.resy, self.resz = int(lcc_info['resx']), int(lcc_info['resy']), int(lcc_info['resz'])
         super().__init__(config, self.resx, self.resy, self.resz)
 
-    def lcc_loss(self, batch_points):
-        pass
+    def lcc_filter(self, batch_points_world, frame_normalized):
+        assert isinstance(frame_normalized, torch.Tensor), "frame_normalized must be a torch.Tensor"
+        assert frame_normalized.numel() == 1, "frame_normalized must be a single value tensor"
+        frame_floor = torch.floor(frame_normalized).long()
+        frame_ceil = torch.ceil(frame_normalized).long()
+        t = frame_normalized - frame_floor
+        bbox_min_smoothed = (1 - t) * self.bbox_min_list_smoothed[frame_floor] + t * self.bbox_min_list_smoothed[frame_ceil]
+        bbox_max_smoothed = (1 - t) * self.bbox_max_list_smoothed[frame_floor] + t * self.bbox_max_list_smoothed[frame_ceil]
+        bbox_min_smoothed_normalized = bbox_min_smoothed
+        bbox_max_smoothed_normalized = bbox_max_smoothed
+
+        batch_points_local = world2sim(batch_points_world, self.s_w2s, self.s_scale)
+        lcc_mask = (batch_points_local >= bbox_min_smoothed_normalized) & (batch_points_local <= bbox_max_smoothed_normalized)
+        lcc_mask = lcc_mask.all(dim=-1)
+        return lcc_mask
+
+    def velocity_lcc_loss(self, batch_points):
+        def g(x):
+            return self.model_d(x)
+
+        batch_time = torch.rand((), device=self.target_device, dtype=self.target_dtype)
+        batch_points_time = torch.cat([batch_points, batch_time.expand(batch_points[..., :1].shape)], dim=-1)
+        batch_points_time_flat = batch_points_time.reshape(-1, 4)
+
+        bbox_mask = insideMask(batch_points_time_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+        batch_points_time_flat_filtered = batch_points_time_flat[bbox_mask]
+        batch_points_time_flat_filtered.requires_grad = True
+
+        hidden = self.encoder_d(batch_points_time_flat_filtered)
+        raw_d = self.model_d(hidden)
+
+        jac = torch.vmap(torch.func.jacrev(g))(hidden)
+        jac_x = get_minibatch_jacobian(hidden, batch_points_time_flat_filtered)
+        jac = jac @ jac_x
+        _d_x, _d_y, _d_z, _d_t = [torch.squeeze(_, -1) for _ in jac.split(1, dim=-1)]
+
+        raw_vel, raw_f = self.model_v(self.encoder_v(batch_points_time_flat_filtered))
+        _u_x, _u_y, _u_z, _u_t = None, None, None, None
+        _u, _v, _w = raw_vel.split(1, dim=-1)
+        split_nse = _d_t + (_u * _d_x + _v * _d_y + _w * _d_z)
+        nse_errors = torch.mean(torch.square(split_nse))
+        split_nse_wei = 0.001
+        nseloss_fine = nse_errors * split_nse_wei
+
+        proj_loss = torch.zeros_like(nseloss_fine)
+
+        viz_dens_mask = raw_d.detach() > 0.1
+        vel_norm = raw_vel.norm(dim=-1, keepdim=True)
+        min_vel_mask = vel_norm.detach() < 0.2 * raw_d.detach()
+        vel_reg_mask = min_vel_mask & viz_dens_mask
+        min_vel_reg_map = (0.2 * raw_d - vel_norm) * vel_reg_mask.float()
+        min_vel_reg = min_vel_reg_map.pow(2).mean()
+
+        lcc_mask = self.lcc_filter(batch_points_time_flat_filtered[..., :3], batch_time)
+        if lcc_mask.all():
+            lcc_loss = None
+        else:
+            lcc_loss = torch.mean(vel_norm[~lcc_mask])
+
+        skip = False
+        if nse_errors.sum() > 10000:
+            print(f'skip large loss {nse_errors.sum():.3g}, timestep={batch_points_time_flat_filtered[0, 3]}')
+            skip = True
+        return skip, nseloss_fine, proj_loss, min_vel_reg, lcc_loss
 
     def forward(self, batch_size: int):
-        pass
+        self.optimizer_v.zero_grad()
+        sampled_points = self._next_sampled_points(batch_size)
+        skip, nseloss_fine, proj_loss, min_vel_reg, lcc_loss = self.velocity_lcc_loss(batch_points=sampled_points)
+        print(f"lcc_loss={lcc_loss}")
+        if lcc_loss is None:
+            vel_loss = 1.0 * nseloss_fine + 1.0 * proj_loss + 10.0 * min_vel_reg
+        else:
+            vel_loss = 1.0 * nseloss_fine + 1.0 * proj_loss + 10.0 * min_vel_reg + 1.0 * lcc_loss
+        # if not skip: # don't skip
+        vel_loss.backward()
+        self.optimizer_v.step()
+        self.scheduler_v.step()
+        self.global_step += 1
+        return vel_loss, nseloss_fine, proj_loss, min_vel_reg, lcc_loss
 
 
 class TrainJointModel(_TrainModelBase):

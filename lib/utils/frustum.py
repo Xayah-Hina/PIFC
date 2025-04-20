@@ -140,6 +140,39 @@ def sample_bbox(resx, resy, resz, batch_size, randomize, target_device, target_d
         yield batch_points
 
 
+def sample_bbox_with_randomization(resx, resy, resz, batch_size, randomize, target_device, target_dtype, s2w, s_w2s, s_scale, s_min, s_max):
+    xs, ys, zs = torch.meshgrid([torch.linspace(0, 1, resx, device=target_device, dtype=target_dtype), torch.linspace(0, 1, resy, device=target_device, dtype=target_dtype), torch.linspace(0, 1, resz, device=target_device, dtype=target_dtype)], indexing='ij')
+    coord_3d_sim = torch.stack([xs, ys, zs], dim=-1)
+    coord_3d_world = sim2world(coord_3d_sim, s2w, s_scale)
+    bbox_mask = insideMask(coord_3d_world, s_w2s, s_scale, s_min, s_max, to_float=False)
+    coord_3d_sim_filtered = coord_3d_sim[bbox_mask].reshape(-1, 3)
+
+    if randomize:
+        # 每个方向的最大扰动范围（半个 voxel）
+        offset_range = torch.tensor([1.0 / resx, 1.0 / resy, 1.0 / resz],
+                                    device=target_device, dtype=target_dtype) * 0.5
+
+        # 添加扰动（均匀分布在 [-0.5/res, 0.5/res] 之间）
+        noise = (torch.rand_like(coord_3d_sim_filtered) - 0.5) * 2.0 * offset_range
+        coord_3d_sim_filtered = coord_3d_sim_filtered + noise
+
+        # 保证不越界 [0,1]^3
+        coord_3d_sim_filtered = coord_3d_sim_filtered.clamp(min=0.0, max=1.0)
+
+    coord_3d_world_filtered = sim2world(coord_3d_sim_filtered, s2w, s_scale)
+    num_points = coord_3d_world_filtered.shape[0]
+
+    if randomize:
+        indices = torch.randperm(num_points, device=target_device)
+    else:
+        indices = torch.arange(num_points, device=target_device)
+
+    for i in range(0, num_points, batch_size):
+        batch_indices = indices[i:i + batch_size]
+        batch_points = coord_3d_world_filtered[batch_indices]
+        yield batch_points
+
+
 def get_minibatch_jacobian(y, x):
     """Computes the Jacobian of y wrt x assuming minibatch-mode.
     Args:

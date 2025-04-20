@@ -85,8 +85,37 @@ def train_velocity(config: TrainConfig, pretrain_density: int, resx: int, resy: 
         return saved_ckpt
 
 
-def train_velocity_lcc(config: TrainConfig, lcc_path: str):
+def train_velocity_lcc(config: TrainConfig, lcc_path: str, pretrain_density: int, total_iter: int, pretrained_ckpt=None):
     model = TrainVelocityLCCModel(config, lcc_path)
+    if pretrained_ckpt is None:
+        pretrained_ckpt = train_density_only(config, pretrain_density, pretrained_ckpt=None)
+    model.load_ckpt(pretrained_ckpt, config.target_device)
+    from torch.utils.tensorboard import SummaryWriter
+    from datetime import datetime
+    date = datetime.now().strftime('%m%d%H%M%S')
+    device_str = f"{config.target_device.type}{config.target_device.index if config.target_device.index is not None else ''}"
+    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}/{device_str}")
+    try:
+        for _ in tqdm.trange(total_iter):
+            vel_loss, nseloss_fine, proj_loss, min_vel_reg, lcc_loss = model.forward(config.batch_size)
+            writer.add_scalar(f"Loss/{date}/{device_str}/vel_loss", vel_loss, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/nseloss_fine", nseloss_fine, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/proj_loss", proj_loss, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/min_vel_reg", min_vel_reg, _)
+            if lcc_loss is None:
+                writer.add_scalar(f"Loss/{date}/{device_str}/lcc_loss", lcc_loss, _)
+            writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_d", model.scheduler_d.get_last_lr()[0], _)
+            writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_v", model.scheduler_v.get_last_lr()[0], _)
+
+            if config.mid_ckpts_iters != -1 and model.global_step % config.mid_ckpts_iters == 0:
+                model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
+    except Exception as e:
+        print(e)
+    finally:
+        final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
+        saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
+        writer.close()
+        return saved_ckpt
 
 
 def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
@@ -180,6 +209,9 @@ if __name__ == "__main__":
         train_velocity_lcc(
             config=train_config,
             lcc_path='data/hyfluid/hyfluid_lcc.yaml',
+            pretrain_density=20000,
+            total_iter=args.total_iter,
+            pretrained_ckpt=args.checkpoint,
         )
 
     if args.option == "train_joint":
