@@ -1,5 +1,3 @@
-from sympy.physics.units import velocity
-
 from .utils.dataset import *
 from .utils.frustum import *
 from .model.encoder_hyfluid import *
