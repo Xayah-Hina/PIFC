@@ -102,7 +102,7 @@ def train_velocity_lcc(config: TrainConfig, lcc_path: str, pretrain_density: int
             writer.add_scalar(f"Loss/{date}/{device_str}/nseloss_fine", nseloss_fine, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/proj_loss", proj_loss, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/min_vel_reg", min_vel_reg, _)
-            if lcc_loss is None:
+            if lcc_loss is not None:
                 writer.add_scalar(f"Loss/{date}/{device_str}/lcc_loss", lcc_loss, _)
             writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_d", model.scheduler_d.get_last_lr()[0], _)
             writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_v", model.scheduler_v.get_last_lr()[0], _)
