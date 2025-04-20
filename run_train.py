@@ -149,13 +149,46 @@ def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
         return saved_ckpt
 
 
+def train_joint_lcc(config: TrainConfig, lcc_path: str, total_iter: int, pretrained_ckpt=None):
+    model = TrainJointLCCModel(config, lcc_path)
+    from torch.utils.tensorboard import SummaryWriter
+    from datetime import datetime
+    date = datetime.now().strftime('%m%d%H%M%S')
+    device_str = f"{config.target_device.type}{config.target_device.index if config.target_device.index is not None else ''}"
+    writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}/{device_str}")
+    try:
+        if pretrained_ckpt:
+            model.load_ckpt(pretrained_ckpt, config.target_device)
+        for _ in tqdm.trange(total_iter):
+            vel_loss, nseloss_fine, img_loss, proj_loss, min_vel_reg, lcc_loss = model.forward(config.batch_size, config.depth_size)
+            writer.add_scalar(f"Loss/{date}/{device_str}/vel_loss", vel_loss, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/nseloss_fine", nseloss_fine, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/img_loss", img_loss, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/proj_loss", proj_loss, _)
+            writer.add_scalar(f"Loss/{date}/{device_str}/min_vel_reg", min_vel_reg, _)
+            if lcc_loss is not None:
+                writer.add_scalar(f"Loss/{date}/{device_str}/lcc_loss", lcc_loss, _)
+            writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_d", model.scheduler_d.get_last_lr()[0], _)
+            writer.add_scalar(f"LearningRate/{date}/{device_str}/scheduler_v", model.scheduler_v.get_last_lr()[0], _)
+
+            if config.mid_ckpts_iters != -1 and model.global_step % config.mid_ckpts_iters == 0:
+                model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
+    except Exception as e:
+        print(e)
+    finally:
+        final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
+        saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
+        writer.close()
+        return saved_ckpt
+
+
 if __name__ == "__main__":
     print("==================== Training starting... ====================")
     torch.set_float32_matmul_precision('high')
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
-    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_velocity_lcc', 'train_joint'], required=True, help="[Required][General] Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_velocity_lcc', 'train_joint', 'train_joint_lcc'], required=True, help="[Required][General] Choose the operation to execute.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
     parser.add_argument('--scene', type=str, choices=['hyfluid', 'plume_1', 'plume_color_1'], default="hyfluid", help="[General] Scene to run.")
@@ -208,7 +241,7 @@ if __name__ == "__main__":
     if args.option == "train_velocity_lcc":
         train_velocity_lcc(
             config=train_config,
-            lcc_path='data/hyfluid/hyfluid_lcc.yaml',
+            lcc_path=f'data/{args.scene}/{args.scene}_lcc.yaml',
             pretrain_density=20000,
             total_iter=args.total_iter,
             pretrained_ckpt=args.checkpoint,
@@ -217,6 +250,14 @@ if __name__ == "__main__":
     if args.option == "train_joint":
         train_joint(
             config=train_config,
+            total_iter=args.total_iter,
+            pretrained_ckpt=args.checkpoint,
+        )
+
+    if args.option == "train_joint_lcc":
+        train_joint_lcc(
+            config=train_config,
+            lcc_path=f'data/{args.scene}/{args.scene}_lcc.yaml',
             total_iter=args.total_iter,
             pretrained_ckpt=args.checkpoint,
         )
