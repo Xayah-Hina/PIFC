@@ -2,7 +2,7 @@ import subprocess
 
 
 def train_velocity_multiprocessing(scene, devices):
-    tags = ["TAG 1", "TAG 2", "TAG 3", "TAG 4", "TAG 5", "TAG 6", "TAG 7", "TAG 8", "TAG 9", "TAG 10"]
+    tags = ["TAG1", "TAG2", "TAG3", "TAG4", "TAG5", "TAG6", "TAG7", "TAG8", "TAG9", "TAG10"]
     lw_imgs = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     lw_nses = [1.0, 5.0, 10.0, 100.0, 1000.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     lw_projs = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
