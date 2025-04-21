@@ -11,7 +11,6 @@ import dataclasses
 class EvaluationConfig:
     # evaluation script
     evaluation_script: str
-    evaluation_tag: str
 
     # checkpoint path
     pretrained_ckpt: str
@@ -74,7 +73,7 @@ class _EvaluationModelBase:
             self.encoder_d.load_state_dict(checkpoint['encoder_d'])
             self.model_v.load_state_dict(checkpoint['model_v'])
             self.encoder_v.load_state_dict(checkpoint['encoder_v'])
-            self.tag = checkpoint['train_tag']
+            self.tag = checkpoint['config']['train_tag']
             print(f"loaded checkpoint from {path}, TAG: {self.tag}")
             print("Model loaded successfully!")
         except Exception as e:
