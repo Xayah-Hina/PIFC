@@ -188,6 +188,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Run training.")
     parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_velocity_lcc', 'train_joint', 'train_joint_lcc'], required=True, help="[Required][General] Choose the operation to execute.")
+    parser.add_argument('--tag', type=str, default="", help="[General] Tag for the training run.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
     parser.add_argument('--scene', type=str, choices=['hyfluid', 'plume_1', 'plume_color_1'], default="hyfluid", help="[General] Scene to run.")
@@ -225,6 +226,7 @@ if __name__ == "__main__":
     print(f"==================== Running command: {args_str} ====================")
     train_config = TrainConfig(
         train_script=args_str,
+        train_tag=args.tag,
         scene_name=args.scene,
         target_device=torch.device(args.device),
         target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,

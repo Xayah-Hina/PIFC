@@ -2,11 +2,12 @@ import subprocess
 
 
 def train_velocity_multiprocessing(scene, device):
-    lw_imgs = [1.0, 1.0, 1.0, 1.0, 1.0]
-    lw_nses = [1.0, 1.0, 5.0, 10.0, 100.0]
-    lw_projs = [1.0, 1.0, 1.0, 1.0, 1.0]
-    lw_min_vel_regs = [10.0, 10.0, 10.0, 10.0, 10.0]
-    lw_lccs = [1.0, 0.1, 0.1, 0.01, 0.01]
+    tags = ["TAG 0", "TAG 1", "TAG 2", "TAG 3", "TAG 4"]
+    lw_imgs = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    lw_nses = [1.0, 5.0, 10.0, 100.0, 1000.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    lw_projs = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    lw_min_vel_regs = [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+    lw_lccs = [1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.1, 0.01, 0.001, 0.0001]
     option = "train_velocity"
     total_iter = 2000
     frame_start = 0
@@ -15,8 +16,9 @@ def train_velocity_multiprocessing(scene, device):
 
     processes = []
 
-    for lw_img, lw_nse, lw_proj, lw_min_vel_reg, lw_lcc in zip(lw_imgs, lw_nses, lw_projs, lw_min_vel_regs, lw_lccs):
+    for tag, lw_img, lw_nse, lw_proj, lw_min_vel_reg, lw_lcc in zip(tags, lw_imgs, lw_nses, lw_projs, lw_min_vel_regs, lw_lccs):
         p = subprocess.Popen(["C:/Program Files/Side Effects Software/Houdini 20.5.550/bin/hython.exe", "run_train.py",
+                              f"--tag={tag}",
                               f"--option={option}",
                               f"--scene={scene}",
                               f"--total_iter={total_iter}",
@@ -28,7 +30,8 @@ def train_velocity_multiprocessing(scene, device):
                               f"--lw_min_vel_reg={lw_min_vel_reg}",
                               f"--lw_lcc={lw_lcc}",
                               f"--checkpoint={checkpoint}",
-                              f"--device={device}"])
+                              f"--device={device}"],
+                             creationflags=subprocess.CREATE_NEW_CONSOLE)
         processes.append(p)
 
     for p in processes:

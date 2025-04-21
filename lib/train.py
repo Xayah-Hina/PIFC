@@ -8,8 +8,9 @@ import dataclasses
 
 @dataclasses.dataclass
 class TrainConfig:
-    # train log
+    # train script
     train_script: str
+    train_tag: str
 
     # datasets
     scene_name: str
@@ -72,6 +73,7 @@ class _TrainModelBase:
         self.global_step = 0
         self.frame_start, self.frame_end = config.frame_start, config.frame_end
 
+        self.tag = config.train_tag
         self.config = config  # Don't use is unless save_ckpt
 
     def _load_model(self, target_device: torch.device, use_rgb):
@@ -126,7 +128,7 @@ class _TrainModelBase:
         from datetime import datetime
         timestamp = datetime.now().strftime('%m%d%H%M%S')
         device_str = f"{self.target_device.type}{self.target_device.index if self.target_device.index is not None else ''}"
-        filename = 'ckpt_{}_{}_{}_{}_{}_{:06d}.tar'.format(self.scene_name, device_str, timestamp, self.frame_start, self.frame_end, self.global_step)
+        filename = '[{}]_ckpt_{}_{}_{}_{}_{}_{:06d}.tar'.format(self.tag, self.scene_name, device_str, timestamp, self.frame_start, self.frame_end, self.global_step)
         os.makedirs(directory, exist_ok=True)
         path = os.path.join(directory, filename)
         if final:
