@@ -9,10 +9,10 @@ def train_velocity_multiprocessing(scene, devices):
     lw_min_vel_regs = [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
     lw_lccs = [1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.1, 0.01, 0.001, 0.0001]
     option = "train_velocity"
-    total_iter = 2000
+    total_iter = 1000
     frame_start = 0
     frame_end = 120
-    checkpoint = "history/train_velocity/ckpt_hyfluid_cuda1_0420044255_150000.tar"
+    checkpoint = "history/train_density_only/ckpt_plume_1_cuda1_0419204709_100000.tar"
 
     processes = []
     device_num = len(devices)
@@ -36,6 +36,8 @@ def train_velocity_multiprocessing(scene, devices):
                              creationflags=subprocess.CREATE_NEW_CONSOLE)
         device_iter += 1
         processes.append(p)
+        import time
+        time.sleep(1.5)
 
     for p in processes:
         p.wait()
@@ -59,6 +61,8 @@ def export_velocity_field_multiprocessing(pretrained_ckpt_path, devices):
                              creationflags=subprocess.CREATE_NEW_CONSOLE)
         device_iter += 1
         processes.append(p)
+        import time
+        time.sleep(1.5)
 
     for p in processes:
         p.wait()
