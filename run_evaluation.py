@@ -21,11 +21,10 @@ def open_file_dialog():
 
 
 if __name__ == "__main__":
-    print("==================== Evaluation starting. ====================")
     torch.set_float32_matmul_precision('high')
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run training or validation.")
+    parser = argparse.ArgumentParser(description="Run validation.")
     parser.add_argument('--option', type=str, choices=['evaluate_render_frame', 'evaluate_resimulation', 'export_density_field', 'export_velocity_field', 'evaluate_density_details', 'evaluate_lcc_bounding_box'], required=True, help="[Required][General] Choose the operation to execute.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
@@ -42,6 +41,9 @@ if __name__ == "__main__":
     if args.select_ckpt and args.checkpoint is None:
         args.checkpoint = open_file_dialog()
     assert args.checkpoint is not None, "Checkpoint are required for evaluation."
+
+    args_str = ' '.join([f'--{k}={v}' for k, v in vars(args).items()])
+    print(f"==================== Running command: {args_str} ====================")
 
     checkpoint = torch.load(args.checkpoint, map_location=args.device, weights_only=True)
     scene_name = checkpoint['config']['scene_name']

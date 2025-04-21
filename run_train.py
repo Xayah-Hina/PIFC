@@ -18,16 +18,6 @@ def open_file_dialog():
             print("invalid file path, please select a valid checkpoint file.")
 
 
-def get_user_input(prompt="Enter Train Log", title="Enter Train Log"):
-    import tkinter as tk
-    from tkinter import simpledialog
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    user_input = simpledialog.askstring(title=title, prompt=prompt)
-    return user_input
-
-
 def get_current_function_name():
     import inspect
     return inspect.currentframe().f_back.f_code.co_name
@@ -193,13 +183,11 @@ def train_joint_lcc(config: TrainConfig, lcc_path: str, total_iter: int, pretrai
 
 
 if __name__ == "__main__":
-    print("==================== Training starting... ====================")
     torch.set_float32_matmul_precision('high')
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run training or validation.")
+    parser = argparse.ArgumentParser(description="Run training.")
     parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_velocity_lcc', 'train_joint', 'train_joint_lcc'], required=True, help="[Required][General] Choose the operation to execute.")
-    parser.add_argument('--train_log', type=str, default="default log information", help="[General] Please always fill in this argument.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
     parser.add_argument('--scene', type=str, choices=['hyfluid', 'plume_1', 'plume_color_1'], default="hyfluid", help="[General] Scene to run.")
@@ -230,14 +218,13 @@ if __name__ == "__main__":
         "lw_lcc": args.lw_lcc,
     }
 
-    if args.train_log == "default log information":
-        args.train_log = get_user_input()
-
     if args.select_ckpt and args.checkpoint is None:
         args.checkpoint = open_file_dialog()
 
+    args_str = ' '.join([f'--{k}={v}' for k, v in vars(args).items()])
+    print(f"==================== Running command: {args_str} ====================")
     train_config = TrainConfig(
-        train_log=args.train_log,
+        train_script=args_str,
         scene_name=args.scene,
         target_device=torch.device(args.device),
         target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,

@@ -9,7 +9,7 @@ import dataclasses
 @dataclasses.dataclass
 class TrainConfig:
     # train log
-    train_log: str
+    train_script: str
 
     # datasets
     scene_name: str
