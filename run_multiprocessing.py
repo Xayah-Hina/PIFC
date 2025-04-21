@@ -9,7 +9,7 @@ def train_velocity_multiprocessing(scene, devices):
     lw_min_vel_regs = [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
     lw_lccs = [1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.1, 0.01, 0.001, 0.0001]
     option = "train_velocity"
-    total_iter = 1000
+    total_iter = 3000
     frame_start = 0
     frame_end = 120
     checkpoint = "history/train_density_only/ckpt_plume_1_cuda1_0419204709_100000.tar"
