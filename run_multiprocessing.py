@@ -33,8 +33,9 @@ def train_velocity_multiprocessing(scene, devices):
                               f"--lw_min_vel_reg={lw_min_vel_reg}",
                               f"--lw_lcc={lw_lcc}",
                               f"--checkpoint={checkpoint}",
-                              f"--device={devices[(device_iter + 1) % device_num]}"],
+                              f"--device={devices[device_iter % device_num]}"],
                              creationflags=subprocess.CREATE_NEW_CONSOLE)
+        device_iter += 1
         processes.append(p)
 
     for p in processes:
