@@ -2,46 +2,22 @@ import subprocess
 
 
 def train_velocity_multiprocessing(scene, device):
-    options = [
-        "train_velocity",
-        "train_velocity",
-        "train_velocity",
-        "train_velocity",
-        "train_velocity",
-    ]
-    total_iters = [
-        2000,
-        2000,
-        2000,
-        2000,
-        2000,
-    ]
-    frame_starts = [
-        0,
-        0,
-        0,
-        0,
-        0,
-    ]
-    frame_ends = [
-        120,
-        120,
-        120,
-        120,
-        120,
-    ]
     lw_imgs = [1.0, 1.0, 1.0, 1.0, 1.0]
     lw_nses = [1.0, 1.0, 5.0, 10.0, 100.0]
     lw_projs = [1.0, 1.0, 1.0, 1.0, 1.0]
     lw_min_vel_regs = [10.0, 10.0, 10.0, 10.0, 10.0]
     lw_lccs = [1.0, 0.1, 0.1, 0.01, 0.01]
+    option = "train_velocity"
+    total_iter = 2000
+    frame_start = 0
+    frame_end = 120
     checkpoint = "history/train_velocity/ckpt_hyfluid_cuda1_0420044255_150000.tar"
 
     processes = []
 
-    for opt, total_iter, frame_start, frame_end, lw_img, lw_nse, lw_proj, lw_min_vel_reg, lw_lcc in zip(options, total_iters, frame_starts, frame_ends, lw_imgs, lw_nses, lw_projs, lw_min_vel_regs, lw_lccs):
+    for lw_img, lw_nse, lw_proj, lw_min_vel_reg, lw_lcc in zip(lw_imgs, lw_nses, lw_projs, lw_min_vel_regs, lw_lccs):
         p = subprocess.Popen(["C:/Program Files/Side Effects Software/Houdini 20.5.550/bin/hython.exe", "run_train.py",
-                              f"--option={opt}",
+                              f"--option={option}",
                               f"--scene={scene}",
                               f"--total_iter={total_iter}",
                               f"--frame_start={frame_start}",
