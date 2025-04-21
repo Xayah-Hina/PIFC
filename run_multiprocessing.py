@@ -1,7 +1,7 @@
 import subprocess
 
 
-def train_velocity_multiprocessing(device):
+def train_velocity_multiprocessing(scene, device):
     options = [
         "train_velocity",
         "train_velocity",
@@ -15,13 +15,6 @@ def train_velocity_multiprocessing(device):
         "[3]: train log",
         "[4]: train log",
         "[5]: train log",
-    ]
-    scenes = [
-        "plume_1",
-        "plume_1",
-        "plume_1",
-        "plume_1",
-        "plume_1",
     ]
     total_iters = [
         2000,
@@ -48,7 +41,7 @@ def train_velocity_multiprocessing(device):
 
     processes = []
 
-    for opt, train_log, scene, total_iter, frame_start, frame_end in zip(options, train_logs, scenes, total_iters, frame_starts, frame_ends):
+    for opt, train_log, total_iter, frame_start, frame_end in zip(options, train_logs, total_iters, frame_starts, frame_ends):
         p = subprocess.Popen(["C:/Program Files/Side Effects Software/Houdini 20.5.550/bin/hython.exe", "run_train.py", f"--option={opt}", f"--train_log={train_log}", f"--scene={scene}", f"--total_iter={total_iter}", f"--frame_start={frame_start}", f"--frame_end={frame_end}", f"--checkpoint={checkpoint}", f"--device={device}"])
         processes.append(p)
 
@@ -65,4 +58,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.option == "train_velocity_multiprocessing":
-        train_velocity_multiprocessing(device=args.device)
+        train_velocity_multiprocessing(scene="plume_1", device=args.device)

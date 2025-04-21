@@ -31,6 +31,8 @@ class TrainConfig:
     frame_start: int
     frame_end: int
 
+    loss_dict: dict = dataclasses.field(default_factory=dict)
+
     def __post_init__(self):
         import yaml
         import os
@@ -298,11 +300,11 @@ class TrainVelocityModel(_TrainModelBase):
             skip = True
         return skip, nseloss_fine, proj_loss, min_vel_reg
 
-    def forward(self, batch_size: int):
+    def forward(self, batch_size: int, loss_dict: dict):
         self.optimizer_v.zero_grad()
         sampled_points = self._next_sampled_points(batch_size)
         skip, nseloss_fine, proj_loss, min_vel_reg = self.velocity_loss(batch_points=sampled_points)
-        vel_loss = 1.0 * nseloss_fine + 1.0 * proj_loss + 10.0 * min_vel_reg
+        vel_loss = loss_dict['lw_nse'] * nseloss_fine + loss_dict['lw_proj'] * proj_loss + loss_dict['lw_min_vel_reg'] * min_vel_reg
         # if not skip: # don't skip
         vel_loss.backward()
         self.optimizer_v.step()
@@ -389,15 +391,14 @@ class TrainVelocityLCCModel(TrainVelocityModel):
             skip = True
         return skip, nseloss_fine, proj_loss, min_vel_reg, lcc_loss
 
-    def forward(self, batch_size: int):
+    def forward(self, batch_size: int, loss_dict: dict):
         self.optimizer_v.zero_grad()
         sampled_points = self._next_sampled_points(batch_size)
         skip, nseloss_fine, proj_loss, min_vel_reg, lcc_loss = self.velocity_lcc_loss(batch_points=sampled_points)
-        print(f"lcc_loss={lcc_loss}")
         if lcc_loss is None:
-            vel_loss = 1.0 * nseloss_fine + 1.0 * proj_loss + 10.0 * min_vel_reg
+            vel_loss = loss_dict['lw_nse'] * nseloss_fine + loss_dict['lw_proj'] * proj_loss + loss_dict['lw_min_vel_reg'] * min_vel_reg
         else:
-            vel_loss = 1.0 * nseloss_fine + 1.0 * proj_loss + 10.0 * min_vel_reg + 1.0 * lcc_loss
+            vel_loss = loss_dict['lw_nse'] * nseloss_fine + loss_dict['lw_proj'] * proj_loss + loss_dict['lw_min_vel_reg'] * min_vel_reg + loss_dict['lw_lcc'] * lcc_loss
         # if not skip: # don't skip
         vel_loss.backward()
         self.optimizer_v.step()
@@ -482,12 +483,12 @@ class TrainJointModel(_TrainModelBase):
             skip = True
         return skip, nseloss_fine, img_loss, proj_loss, min_vel_reg
 
-    def forward(self, batch_size: int, depth_size: int):
+    def forward(self, batch_size: int, depth_size: int, loss_dict: dict):
         self.optimizer_d.zero_grad()
         self.optimizer_v.zero_grad()
         batch_indices, batch_rays_o, batch_rays_d = self._next_batch(batch_size)
         skip, nseloss_fine, img_loss, proj_loss, min_vel_reg = self.joint_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
-        vel_loss = 10000 * img_loss + 1.0 * nseloss_fine + 1.0 * proj_loss + 10.0 * min_vel_reg
+        vel_loss = 10000 * loss_dict['lw_img'] * img_loss + loss_dict['lw_nse'] * nseloss_fine + loss_dict['lw_proj'] * proj_loss + loss_dict['lw_min_vel_reg'] * min_vel_reg
         # if not skip: # don't skip
         vel_loss.backward()
         self.optimizer_d.step()
@@ -605,15 +606,15 @@ class TrainJointLCCModel(_TrainModelBase):
             skip = True
         return skip, nseloss_fine, img_loss, proj_loss, min_vel_reg, lcc_loss
 
-    def forward(self, batch_size: int, depth_size: int):
+    def forward(self, batch_size: int, depth_size: int, loss_dict: dict):
         self.optimizer_d.zero_grad()
         self.optimizer_v.zero_grad()
         batch_indices, batch_rays_o, batch_rays_d = self._next_batch(batch_size)
         skip, nseloss_fine, img_loss, proj_loss, min_vel_reg, lcc_loss = self.joint_lcc_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
         if lcc_loss is None:
-            vel_loss = 10000 * img_loss + 1.0 * nseloss_fine + 1.0 * proj_loss + 10.0 * min_vel_reg
+            vel_loss = 10000 * loss_dict['lw_img'] * img_loss + loss_dict['lw_nse'] * nseloss_fine + loss_dict['lw_proj'] * proj_loss + loss_dict['lw_min_vel_reg'] * min_vel_reg
         else:
-            vel_loss = 10000 * img_loss + 1.0 * nseloss_fine + 1.0 * proj_loss + 10.0 * min_vel_reg + 1.0 * lcc_loss
+            vel_loss = 10000 * loss_dict['lw_img'] * img_loss + loss_dict['lw_nse'] * nseloss_fine + loss_dict['lw_proj'] * proj_loss + loss_dict['lw_min_vel_reg'] * min_vel_reg + loss_dict['lw_lcc'] * lcc_loss
         # if not skip: # don't skip
         vel_loss.backward()
         self.optimizer_d.step()

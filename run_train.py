@@ -76,7 +76,7 @@ def train_velocity(config: TrainConfig, pretrain_density: int, resx: int, resy: 
     writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}/{device_str}")
     try:
         for _ in tqdm.trange(total_iter):
-            vel_loss, nseloss_fine, proj_loss, min_vel_reg = model.forward(config.batch_size)
+            vel_loss, nseloss_fine, proj_loss, min_vel_reg = model.forward(config.batch_size, config.loss_dict)
             writer.add_scalar(f"Loss/{date}/{device_str}/vel_loss", vel_loss, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/nseloss_fine", nseloss_fine, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/proj_loss", proj_loss, _)
@@ -107,7 +107,7 @@ def train_velocity_lcc(config: TrainConfig, lcc_path: str, pretrain_density: int
     writer = SummaryWriter(log_dir=f"ckpt/tensorboard/{get_current_function_name()}/{date}/{device_str}")
     try:
         for _ in tqdm.trange(total_iter):
-            vel_loss, nseloss_fine, proj_loss, min_vel_reg, lcc_loss = model.forward(config.batch_size)
+            vel_loss, nseloss_fine, proj_loss, min_vel_reg, lcc_loss = model.forward(config.batch_size, config.loss_dict)
             writer.add_scalar(f"Loss/{date}/{device_str}/vel_loss", vel_loss, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/nseloss_fine", nseloss_fine, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/proj_loss", proj_loss, _)
@@ -215,7 +215,20 @@ if __name__ == "__main__":
     parser.add_argument('--resx', type=int, default=128, help="[train_velocity only] Resolution in x direction.")
     parser.add_argument('--resy', type=int, default=192, help="[train_velocity only] Resolution in y direction.")
     parser.add_argument('--resz', type=int, default=128, help="[train_velocity only] Resolution in z direction.")
+    parser.add_argument('--lw_img', type=float, default=1.0, help="[train_density_only, train_velocity only, train_joint] Weight for image loss.")
+    parser.add_argument('--lw_nse', type=float, default=1.0, help="[train_velocity only, train_joint] Weight for NSE loss.")
+    parser.add_argument('--lw_proj', type=float, default=1.0, help="[train_velocity only, train_joint] Weight for projection loss.")
+    parser.add_argument('--lw_min_vel_reg', type=float, default=10.0, help="[train_velocity only, train_joint] Weight for minimum velocity regularization.")
+    parser.add_argument('--lw_lcc', type=float, default=1.0, help="[train_velocity_lcc only, train_joint_lcc] Weight for LCC loss.")
     args = parser.parse_args()
+
+    loss_dict = {
+        "lw_img": args.lw_img,
+        "lw_nse": args.lw_nse,
+        "lw_proj": args.lw_proj,
+        "lw_min_vel_reg": args.lw_min_vel_reg,
+        "lw_lcc": args.lw_lcc,
+    }
 
     if args.train_log == "default log information":
         args.train_log = get_user_input()
@@ -235,6 +248,7 @@ if __name__ == "__main__":
         use_rgb=args.scene == "plume_color_1",
         frame_start=args.frame_start,
         frame_end=args.frame_end,
+        loss_dict=loss_dict,
     )
 
     if args.option == "train_density_only":
