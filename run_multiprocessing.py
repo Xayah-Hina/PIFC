@@ -113,15 +113,16 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Run multiple training scripts.")
     parser.add_argument('--option', type=str, choices=['train_velocity_multiprocessing', 'evaluate_velocity_multiprocessing', 'train_velocity_lcc_multiprocessing'], required=True, help="[Required][General] Choose the operation to execute.")
+    parser.add_argument('--scene', type=str, choices=['hyfluid', 'plume_1', 'plume_color_1'], default="hyfluid", help="[General] Scene to run.")
     args = parser.parse_args()
 
     if args.option == "train_velocity_multiprocessing":
-        train_velocity_multiprocessing(scene="plume_1", devices=["cuda:0", "cuda:1"])
-        export_velocity_field_multiprocessing(pretrained_ckpt_path="ckpt/plume_1/train_velocity", devices=["cuda:0", "cuda:1"])
+        train_velocity_multiprocessing(scene=args.scene, devices=["cuda:0", "cuda:1"])
+        export_velocity_field_multiprocessing(pretrained_ckpt_path=f"ckpt/{args.scene}/train_velocity", devices=["cuda:0", "cuda:1"])
 
     if args.option == "train_velocity_lcc_multiprocessing":
-        train_velocity_lcc_multiprocessing(scene="plume_1", devices=["cuda:0", "cuda:1"])
-        export_velocity_field_multiprocessing(pretrained_ckpt_path="ckpt/plume_1/train_velocity_lcc", devices=["cuda:0", "cuda:1"])
+        train_velocity_lcc_multiprocessing(scene=args.scene, devices=["cuda:0", "cuda:1"])
+        export_velocity_field_multiprocessing(pretrained_ckpt_path=f"ckpt/{args.scene}/train_velocity_lcc", devices=["cuda:0", "cuda:1"])
 
     if args.option == "evaluate_velocity_multiprocessing":
-        export_velocity_field_multiprocessing(pretrained_ckpt_path="ckpt/plume_1/train_velocity", devices=["cuda:0", "cuda:1"])
+        export_velocity_field_multiprocessing(pretrained_ckpt_path=f"ckpt/{args.scene}/train_velocity", devices=["cuda:0", "cuda:1"])
