@@ -2,7 +2,7 @@ import subprocess
 
 
 def train_velocity_multiprocessing(scene, device):
-    tags = ["TAG 0", "TAG 1", "TAG 2", "TAG 3", "TAG 4"]
+    tags = ["TAG 1", "TAG 2", "TAG 3", "TAG 4", "TAG 5", "TAG 6", "TAG 7", "TAG 8", "TAG 9", "TAG 10"]
     lw_imgs = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     lw_nses = [1.0, 5.0, 10.0, 100.0, 1000.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     lw_projs = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
@@ -17,6 +17,7 @@ def train_velocity_multiprocessing(scene, device):
     processes = []
 
     for tag, lw_img, lw_nse, lw_proj, lw_min_vel_reg, lw_lcc in zip(tags, lw_imgs, lw_nses, lw_projs, lw_min_vel_regs, lw_lccs):
+        print(f"Training {tag}")
         p = subprocess.Popen(["C:/Program Files/Side Effects Software/Houdini 20.5.550/bin/hython.exe", "run_train.py",
                               f"--tag={tag}",
                               f"--option={option}",
