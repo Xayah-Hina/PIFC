@@ -56,6 +56,7 @@ def export_velocity_field_multiprocessing(pretrained_ckpt_path, devices):
 
     for checkpoint in zip(ckpt_files):
         p = subprocess.Popen(["C:/Program Files/Side Effects Software/Houdini 20.5.550/bin/hython.exe", "run_evaluation.py",
+                              f"--option={option}",
                               f"--checkpoint={checkpoint}",
                               f"--device={devices[device_iter % device_num]}"],
                              creationflags=subprocess.CREATE_NEW_CONSOLE)
