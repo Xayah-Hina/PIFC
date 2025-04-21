@@ -32,8 +32,7 @@ def train_velocity_multiprocessing(scene, devices):
                               f"--lw_min_vel_reg={lw_min_vel_reg}",
                               f"--lw_lcc={lw_lcc}",
                               f"--checkpoint={checkpoint}",
-                              f"--device={devices[device_iter % device_num]}"],
-                             creationflags=subprocess.CREATE_NEW_CONSOLE)
+                              f"--device={devices[device_iter % device_num]}"])
         device_iter += 1
         processes.append(p)
         import time
@@ -74,8 +73,7 @@ def train_velocity_lcc_multiprocessing(scene, devices):
                               f"--lw_min_vel_reg={lw_min_vel_reg}",
                               f"--lw_lcc={lw_lcc}",
                               f"--checkpoint={checkpoint}",
-                              f"--device={devices[device_iter % device_num]}"],
-                             creationflags=subprocess.CREATE_NEW_CONSOLE)
+                              f"--device={devices[device_iter % device_num]}"])
         device_iter += 1
         processes.append(p)
         import time
@@ -100,8 +98,7 @@ def export_velocity_field_multiprocessing(pretrained_ckpt_path, devices):
         p = subprocess.Popen(["C:/Program Files/Side Effects Software/Houdini 20.5.550/bin/hython.exe", "run_evaluation.py",
                               f"--option={option}",
                               f"--checkpoint={checkpoint}",
-                              f"--device={devices[device_iter % device_num]}"],
-                             creationflags=subprocess.CREATE_NEW_CONSOLE)
+                              f"--device={devices[device_iter % device_num]}"])
         device_iter += 1
         processes.append(p)
         import time
@@ -124,7 +121,7 @@ if __name__ == "__main__":
 
     if args.option == "train_velocity_lcc_multiprocessing":
         train_velocity_lcc_multiprocessing(scene="plume_1", devices=["cuda:0", "cuda:1"])
-        export_velocity_field_multiprocessing(pretrained_ckpt_path="ckpt/plume_1/train_velocity", devices=["cuda:0", "cuda:1"])
+        export_velocity_field_multiprocessing(pretrained_ckpt_path="ckpt/plume_1/train_velocity_lcc", devices=["cuda:0", "cuda:1"])
 
     if args.option == "evaluate_velocity_multiprocessing":
         export_velocity_field_multiprocessing(pretrained_ckpt_path="ckpt/plume_1/train_velocity", devices=["cuda:0", "cuda:1"])
