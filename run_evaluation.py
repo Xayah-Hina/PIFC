@@ -78,15 +78,15 @@ if __name__ == "__main__":
                 for f in tqdm.tqdm(list(reversed(range(frame_start, frame_end))), desc="Rendering frames", unit="frame"):
                     rgb_map_final = model.render_frame(args.batch_ray_size, args.depth_size, frame_normalized=float(f) / float(total_frames))
                     rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
-                    os.makedirs(f'ckpt/{scene_name}/render_frame', exist_ok=True)
-                    imageio.imwrite(os.path.join(f'ckpt/{scene_name}/render_frame', 'rgb_{:03d}.png'.format(f)), rgb8)
+                    os.makedirs(f'ckpt/{scene_name}/{model.tag}/render_frame', exist_ok=True)
+                    imageio.imwrite(os.path.join(f'ckpt/{scene_name}/{model.tag}/render_frame', 'rgb_{:03d}.png'.format(f)), rgb8)
                     rgb8_list.append(rgb8)
-                imageiov2.mimsave(os.path.join(f'ckpt/{scene_name}/render_frame', 'video_rgb.mp4'.format(f)), list(reversed(rgb8_list)), fps=24)
+                imageiov2.mimsave(os.path.join(f'ckpt/{scene_name}/{model.tag}/render_frame', 'video_rgb.mp4'.format(f)), list(reversed(rgb8_list)), fps=24)
             else:
                 rgb_map_final = model.render_frame(args.batch_ray_size, args.depth_size, frame_normalized=float(args.frame) / float(total_frames))
                 rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
-                os.makedirs(f'ckpt/{scene_name}/render_frame', exist_ok=True)
-                imageio.imwrite(os.path.join(f'ckpt/{scene_name}/render_frame', 'rgb_{:03d}.png'.format(args.frame)), rgb8)
+                os.makedirs(f'ckpt/{scene_name}/{model.tag}/render_frame', exist_ok=True)
+                imageio.imwrite(os.path.join(f'ckpt/{scene_name}/{model.tag}/render_frame', 'rgb_{:03d}.png'.format(args.frame)), rgb8)
 
     if args.option == "evaluate_resimulation":
         with torch.no_grad():
@@ -103,7 +103,7 @@ if __name__ == "__main__":
                     den = model.advect_density(den, vel_sim_confined, source, dt, model.coord_3d_sim[..., 1] > source_height)
                 lib.utils.houdini.export_density_field(
                     den,
-                    save_path=f"ckpt/{scene_name}/resimulation",
+                    save_path=f"ckpt/{scene_name}/{model.tag}/resimulation",
                     surname=f"density_{step:03d}",
                     local2world=model.s2w,
                     scale=model.s_scale,
@@ -117,21 +117,21 @@ if __name__ == "__main__":
             for _ in tqdm.trange(frame_start, frame_end):
                 lib.utils.houdini.export_density_field(
                     den=model.sample_density_grid(frame_normalized=float(_) / float(total_frames)),
-                    save_path=f"ckpt/{scene_name}/export",
+                    save_path=f"ckpt/{scene_name}/{model.tag}/export",
                     surname=f"density_{_ + 1:03d}",
                     local2world=model.s2w,
                     scale=model.s_scale,
                 )
-                lib.utils.houdini.create_voxel_boxes(model_occupancy.sample_density_grid(frame_normalized=float(_) / float(total_frames)) > 1e-5, f"ckpt/{scene_name}/export", f"occupancy_grid_valid_{_ + 1:03d}", evaluation_config.s2w, evaluation_config.s_scale)
+                lib.utils.houdini.create_voxel_boxes(model_occupancy.sample_density_grid(frame_normalized=float(_) / float(total_frames)) > 1e-5, f"ckpt/{scene_name}/{model.tag}/export", f"occupancy_grid_valid_{_ + 1:03d}", evaluation_config.s2w, evaluation_config.s_scale)
         else:
             lib.utils.houdini.export_density_field(
                 den=model.sample_density_grid(frame_normalized=float(args.frame) / float(total_frames)),
-                save_path=f"ckpt/{scene_name}/export",
+                save_path=f"ckpt/{scene_name}/{model.tag}/export",
                 surname=f"density_{args.frame:03d}",
                 local2world=model.s2w,
                 scale=model.s_scale,
             )
-            lib.utils.houdini.create_voxel_boxes(model_occupancy.sample_density_grid(frame_normalized=float(args.frame) / float(total_frames)) > 1e-5, f"ckpt/{scene_name}/export", f"occupancy_grid_valid_{args.frame:03d}", evaluation_config.s2w, evaluation_config.s_scale)
+            lib.utils.houdini.create_voxel_boxes(model_occupancy.sample_density_grid(frame_normalized=float(args.frame) / float(total_frames)) > 1e-5, f"ckpt/{scene_name}/{model.tag}/export", f"occupancy_grid_valid_{args.frame:03d}", evaluation_config.s2w, evaluation_config.s_scale)
 
     if args.option == "export_velocity_field":
         model = EvaluationDiscreteSpatial(evaluation_config, args.resx, args.resy, args.resz)
@@ -139,7 +139,7 @@ if __name__ == "__main__":
             for _ in tqdm.trange(frame_start, frame_end):
                 lib.utils.houdini.export_velocity_field(
                     vel=model.sample_velocity_grid(frame_normalized=float(_) / float(total_frames)),
-                    save_path=f"ckpt/{scene_name}/export",
+                    save_path=f"ckpt/{scene_name}/{model.tag}/export",
                     surname=f"velocity_{_ + 1:03d}",
                     local2world=model.s2w,
                     scale=model.s_scale,
@@ -147,7 +147,7 @@ if __name__ == "__main__":
         else:
             lib.utils.houdini.export_velocity_field(
                 vel=model.sample_velocity_grid(frame_normalized=float(args.frame) / float(total_frames)),
-                save_path=f"ckpt/{scene_name}/export",
+                save_path=f"ckpt/{scene_name}/{model.tag}/export",
                 surname=f"velocity_{args.frame:03d}",
                 local2world=model.s2w,
                 scale=model.s_scale,
@@ -218,7 +218,7 @@ if __name__ == "__main__":
         for _ in tqdm.trange(frame_start, frame_end):
             lib.utils.houdini.export_density_field_with_bbox(
                 den=den_list[sample_idx],
-                save_path=f"ckpt/{scene_name}/export",
+                save_path=f"ckpt/{scene_name}/{model.tag}/export",
                 surname=f"density_bbox_{_ + 1:03d}",
                 local2world=model.s2w,
                 scale=model.s_scale,

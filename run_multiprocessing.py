@@ -15,7 +15,6 @@ def train_velocity_multiprocessing(scene, devices):
     checkpoint = "history/train_velocity/ckpt_hyfluid_cuda1_0420044255_150000.tar"
 
     processes = []
-
     device_num = len(devices)
     device_iter = 0
     for tag, lw_img, lw_nse, lw_proj, lw_min_vel_reg, lw_lcc in zip(tags, lw_imgs, lw_nses, lw_projs, lw_min_vel_regs, lw_lccs):
@@ -42,10 +41,27 @@ def train_velocity_multiprocessing(scene, devices):
         p.wait()
 
 
-def evaluate_velocity_multiprocessing(pretrained_ckpt_path, devices):
+def export_velocity_field_multiprocessing(pretrained_ckpt_path, devices):
+    option = "export_velocity_field"
+
     from pathlib import Path
-    tar_files = list(Path(pretrained_ckpt_path).glob("*.tar"))
-    print([str(p) for p in tar_files])
+    ckpt_files = list(Path(pretrained_ckpt_path).glob("*.tar"))
+    assert len(ckpt_files) > 0, f"Checkpoint files not found in {pretrained_ckpt_path}"
+
+    processes = []
+    device_num = len(devices)
+    device_iter = 0
+
+    for checkpoint in zip(ckpt_files):
+        p = subprocess.Popen(["C:/Program Files/Side Effects Software/Houdini 20.5.550/bin/hython.exe", "run_evaluation.py",
+                              f"--checkpoint={checkpoint}",
+                              f"--device={devices[device_iter % device_num]}"],
+                             creationflags=subprocess.CREATE_NEW_CONSOLE)
+        device_iter += 1
+        processes.append(p)
+
+    for p in processes:
+        p.wait()
 
 
 if __name__ == "__main__":
@@ -59,4 +75,4 @@ if __name__ == "__main__":
         train_velocity_multiprocessing(scene="plume_1", devices=["cuda:0", "cuda:1"])
 
     if args.option == "evaluate_velocity_multiprocessing":
-        evaluate_velocity_multiprocessing(pretrained_ckpt_path="ckpt/plume_1/train_velocity", devices=["cuda:0", "cuda:1"])
+        export_velocity_field_multiprocessing(pretrained_ckpt_path="ckpt/plume_1/train_velocity", devices=["cuda:0", "cuda:1"])

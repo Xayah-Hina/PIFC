@@ -56,6 +56,7 @@ class _EvaluationModelBase:
         self.target_dtype = config.target_dtype
         self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = config.s_w2s, config.s2w, config.s_scale, config.s_min, config.s_max
         self.ratio = config.ratio
+        self.tag = 'DEFAULT_TAG'
 
     def _load_model(self, target_device: torch.device, use_rgb):
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
@@ -73,7 +74,8 @@ class _EvaluationModelBase:
             self.encoder_d.load_state_dict(checkpoint['encoder_d'])
             self.model_v.load_state_dict(checkpoint['model_v'])
             self.encoder_v.load_state_dict(checkpoint['encoder_v'])
-            print(f"loaded checkpoint from {path}")
+            self.tag = checkpoint['train_tag']
+            print(f"loaded checkpoint from {path}, TAG: {self.tag}")
             print("Model loaded successfully!")
         except Exception as e:
             print(f"Error loading model: {e}")
