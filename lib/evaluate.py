@@ -47,6 +47,7 @@ class EvaluationConfig:
 
 class _EvaluationModelBase:
     def __init__(self, config):
+        self.tag = 'DEFAULT_TAG'
         self._load_model(config.target_device, config.use_rgb)
         self._load_validation_dataset(config.validation_videos, config.validation_camera_calibrations, config.frame_start, config.frame_end, config.ratio, config.target_device, config.target_dtype)
         self.load_ckpt(config.pretrained_ckpt, config.target_device)
@@ -55,7 +56,6 @@ class _EvaluationModelBase:
         self.target_dtype = config.target_dtype
         self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = config.s_w2s, config.s2w, config.s_scale, config.s_min, config.s_max
         self.ratio = config.ratio
-        self.tag = 'DEFAULT_TAG'
 
     def _load_model(self, target_device: torch.device, use_rgb):
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
