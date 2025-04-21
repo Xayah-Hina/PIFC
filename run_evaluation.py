@@ -49,11 +49,14 @@ if __name__ == "__main__":
     scene_name = checkpoint['config']['scene_name']
     frame_start = int(checkpoint['config']['frame_start'])
     frame_end = int(checkpoint['config']['frame_end'])
+    tag = checkpoint['config']['tag']
     total_frames = frame_end - frame_start
     print(f"==================== Evaluating: {scene_name} ====================")
     print(f"Checkpoint Information: {checkpoint['config']}, frame_start: {frame_start}, frame_end: {frame_end}")
 
     evaluation_config = EvaluationConfig(
+        evaluation_script=args_str,
+        evaluation_tag=tag,
         scene_name=scene_name,
         pretrained_ckpt=args.checkpoint,
         target_device=torch.device(args.device),

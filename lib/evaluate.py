@@ -9,7 +9,11 @@ import dataclasses
 
 @dataclasses.dataclass
 class EvaluationConfig:
-    # checkpoint p  ath
+    # evaluation script
+    evaluation_script: str
+    evaluation_tag: str
+
+    # checkpoint path
     pretrained_ckpt: str
     scene_name: str
 

@@ -42,12 +42,21 @@ def train_velocity_multiprocessing(scene, devices):
         p.wait()
 
 
+def evaluate_velocity_multiprocessing(pretrained_ckpt_path, devices):
+    from pathlib import Path
+    tar_files = list(Path(pretrained_ckpt_path).glob("*.tar"))
+    print([str(p) for p in tar_files])
+
+
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run multiple training scripts.")
-    parser.add_argument('--option', type=str, choices=['train_velocity_multiprocessing'], required=True, help="[Required][General] Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=['train_velocity_multiprocessing', 'evaluate_velocity_multiprocessing'], required=True, help="[Required][General] Choose the operation to execute.")
     args = parser.parse_args()
 
     if args.option == "train_velocity_multiprocessing":
         train_velocity_multiprocessing(scene="plume_1", devices=["cuda:0", "cuda:1"])
+
+    if args.option == "evaluate_velocity_multiprocessing":
+        evaluate_velocity_multiprocessing(pretrained_ckpt_path="ckpt/plume_1/train_velocity", devices=["cuda:0", "cuda:1"])
