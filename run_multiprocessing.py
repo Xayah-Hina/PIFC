@@ -42,6 +42,7 @@ def train_velocity_multiprocessing(scene, devices):
     for p in processes:
         p.wait()
 
+
 def train_velocity_lcc_multiprocessing(scene, devices):
     tags = ["TAG1", "TAG2", "TAG3", "TAG4", "TAG5", "TAG6", "TAG7", "TAG8", "TAG9", "TAG10"]
     lw_imgs = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
@@ -119,9 +120,11 @@ if __name__ == "__main__":
 
     if args.option == "train_velocity_multiprocessing":
         train_velocity_multiprocessing(scene="plume_1", devices=["cuda:0", "cuda:1"])
-
-    if args.option == "evaluate_velocity_multiprocessing":
         export_velocity_field_multiprocessing(pretrained_ckpt_path="ckpt/plume_1/train_velocity", devices=["cuda:0", "cuda:1"])
 
     if args.option == "train_velocity_lcc_multiprocessing":
         train_velocity_lcc_multiprocessing(scene="plume_1", devices=["cuda:0", "cuda:1"])
+        export_velocity_field_multiprocessing(pretrained_ckpt_path="ckpt/plume_1/train_velocity", devices=["cuda:0", "cuda:1"])
+
+    if args.option == "evaluate_velocity_multiprocessing":
+        export_velocity_field_multiprocessing(pretrained_ckpt_path="ckpt/plume_1/train_velocity", devices=["cuda:0", "cuda:1"])
