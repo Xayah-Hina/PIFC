@@ -139,7 +139,7 @@ def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
         if pretrained_ckpt:
             model.load_ckpt(pretrained_ckpt, config.target_device)
         for _ in tqdm.trange(total_iter):
-            vel_loss, nseloss_fine, img_loss, proj_loss, min_vel_reg = model.forward(config.batch_size, config.depth_size)
+            vel_loss, nseloss_fine, img_loss, proj_loss, min_vel_reg = model.forward(config.batch_size, config.depth_size, config.loss_dict)
             writer.add_scalar(f"Loss/{date}/{device_str}/vel_loss", vel_loss, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/nseloss_fine", nseloss_fine, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/img_loss", img_loss, _)
@@ -170,7 +170,7 @@ def train_joint_lcc(config: TrainConfig, lcc_path: str, total_iter: int, pretrai
         if pretrained_ckpt:
             model.load_ckpt(pretrained_ckpt, config.target_device)
         for _ in tqdm.trange(total_iter):
-            vel_loss, nseloss_fine, img_loss, proj_loss, min_vel_reg, lcc_loss = model.forward(config.batch_size, config.depth_size)
+            vel_loss, nseloss_fine, img_loss, proj_loss, min_vel_reg, lcc_loss = model.forward(config.batch_size, config.depth_size, config.loss_dict)
             writer.add_scalar(f"Loss/{date}/{device_str}/vel_loss", vel_loss, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/nseloss_fine", nseloss_fine, _)
             writer.add_scalar(f"Loss/{date}/{device_str}/img_loss", img_loss, _)
