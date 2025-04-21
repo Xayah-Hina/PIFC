@@ -1,7 +1,7 @@
 import subprocess
 
 
-def train_velocity_multiprocessing(scene, device):
+def train_velocity_multiprocessing(scene, devices):
     tags = ["TAG 1", "TAG 2", "TAG 3", "TAG 4", "TAG 5", "TAG 6", "TAG 7", "TAG 8", "TAG 9", "TAG 10"]
     lw_imgs = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     lw_nses = [1.0, 5.0, 10.0, 100.0, 1000.0, 1.0, 1.0, 1.0, 1.0, 1.0]
@@ -16,6 +16,8 @@ def train_velocity_multiprocessing(scene, device):
 
     processes = []
 
+    device_num = len(devices)
+    device_iter = 0
     for tag, lw_img, lw_nse, lw_proj, lw_min_vel_reg, lw_lcc in zip(tags, lw_imgs, lw_nses, lw_projs, lw_min_vel_regs, lw_lccs):
         print(f"Training {tag}")
         p = subprocess.Popen(["C:/Program Files/Side Effects Software/Houdini 20.5.550/bin/hython.exe", "run_train.py",
@@ -31,7 +33,7 @@ def train_velocity_multiprocessing(scene, device):
                               f"--lw_min_vel_reg={lw_min_vel_reg}",
                               f"--lw_lcc={lw_lcc}",
                               f"--checkpoint={checkpoint}",
-                              f"--device={device}"],
+                              f"--device={devices[(device_iter + 1) % device_num]}"],
                              creationflags=subprocess.CREATE_NEW_CONSOLE)
         processes.append(p)
 
@@ -44,8 +46,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Run multiple training scripts.")
     parser.add_argument('--option', type=str, choices=['train_velocity_multiprocessing'], required=True, help="[Required][General] Choose the operation to execute.")
-    parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     args = parser.parse_args()
 
     if args.option == "train_velocity_multiprocessing":
-        train_velocity_multiprocessing(scene="plume_1", device=args.device)
+        train_velocity_multiprocessing(scene="plume_1", devices=["cuda:0", "cuda:1"])
