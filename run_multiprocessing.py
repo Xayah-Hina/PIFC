@@ -37,7 +37,7 @@ def train_velocity_multiprocessing(scene, devices):
         device_iter += 1
         processes.append(p)
         import time
-        time.sleep(1.5)
+        time.sleep(2.0)
 
     for p in processes:
         p.wait()
@@ -54,7 +54,7 @@ def export_velocity_field_multiprocessing(pretrained_ckpt_path, devices):
     device_num = len(devices)
     device_iter = 0
 
-    for checkpoint in zip(ckpt_files):
+    for checkpoint in ckpt_files:
         p = subprocess.Popen(["C:/Program Files/Side Effects Software/Houdini 20.5.550/bin/hython.exe", "run_evaluation.py",
                               f"--option={option}",
                               f"--checkpoint={checkpoint}",
@@ -63,7 +63,7 @@ def export_velocity_field_multiprocessing(pretrained_ckpt_path, devices):
         device_iter += 1
         processes.append(p)
         import time
-        time.sleep(1.5)
+        time.sleep(2.0)
 
     for p in processes:
         p.wait()
