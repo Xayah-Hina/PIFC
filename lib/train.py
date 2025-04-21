@@ -8,6 +8,9 @@ import dataclasses
 
 @dataclasses.dataclass
 class TrainConfig:
+    # train log
+    train_log: str
+
     # datasets
     scene_name: str
 
@@ -65,6 +68,7 @@ class _TrainModelBase:
         self.generator = None
         self.videos_data_resampled = None
         self.global_step = 0
+        self.frame_start, self.frame_end = config.frame_start, config.frame_end
 
         self.config = config  # Don't use is unless save_ckpt
 
@@ -120,7 +124,7 @@ class _TrainModelBase:
         from datetime import datetime
         timestamp = datetime.now().strftime('%m%d%H%M%S')
         device_str = f"{self.target_device.type}{self.target_device.index if self.target_device.index is not None else ''}"
-        filename = 'ckpt_{}_{}_{}_{:06d}.tar'.format(self.scene_name, device_str, timestamp, self.global_step)
+        filename = 'ckpt_{}_{}_{}_{}_{}_{:06d}.tar'.format(self.scene_name, device_str, timestamp, self.frame_start, self.frame_end, self.global_step)
         os.makedirs(directory, exist_ok=True)
         path = os.path.join(directory, filename)
         if final:

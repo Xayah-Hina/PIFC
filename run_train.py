@@ -18,6 +18,16 @@ def open_file_dialog():
             print("invalid file path, please select a valid checkpoint file.")
 
 
+def get_user_input(prompt="Enter Train Log", title="Enter Train Log"):
+    import tkinter as tk
+    from tkinter import simpledialog
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    user_input = simpledialog.askstring(title=title, prompt=prompt)
+    return user_input
+
+
 def get_current_function_name():
     import inspect
     return inspect.currentframe().f_back.f_code.co_name
@@ -189,9 +199,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Run training or validation.")
     parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_velocity_lcc', 'train_joint', 'train_joint_lcc'], required=True, help="[Required][General] Choose the operation to execute.")
+    parser.add_argument('--train_log', type=str, default="default log information", help="[General] Please always fill in this argument.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
     parser.add_argument('--scene', type=str, choices=['hyfluid', 'plume_1', 'plume_color_1'], default="hyfluid", help="[General] Scene to run.")
+    parser.add_argument('--frame_start', type=int, default=0, help="[General] Start frame for training.")
+    parser.add_argument('--frame_end', type=int, default=120, help="[General] End frame for training.")
     parser.add_argument('--batch_size', type=int, default=1024, help="[General] Batch size for training.")
     parser.add_argument('--depth_size', type=int, default=512, help="[General] Depth size for training.")
     parser.add_argument('--ratio', type=float, default=0.5, help="[General] Ratio of resolution resampling.")
@@ -204,10 +217,14 @@ if __name__ == "__main__":
     parser.add_argument('--resz', type=int, default=128, help="[train_velocity only] Resolution in z direction.")
     args = parser.parse_args()
 
+    if args.train_log == "default log information":
+        args.train_log = get_user_input()
+
     if args.select_ckpt and args.checkpoint is None:
         args.checkpoint = open_file_dialog()
 
     train_config = TrainConfig(
+        train_log=args.train_log,
         scene_name=args.scene,
         target_device=torch.device(args.device),
         target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
@@ -216,8 +233,8 @@ if __name__ == "__main__":
         ratio=args.ratio,
         mid_ckpts_iters=args.mid_ckpt_iters,
         use_rgb=args.scene == "plume_color_1",
-        frame_start=0,
-        frame_end=120,
+        frame_start=args.frame_start,
+        frame_end=args.frame_end,
     )
 
     if args.option == "train_density_only":
