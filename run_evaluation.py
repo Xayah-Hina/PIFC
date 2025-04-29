@@ -25,7 +25,15 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run validation.")
-    parser.add_argument('--option', type=str, choices=['evaluate_render_frame', 'evaluate_resimulation', 'export_density_field', 'export_velocity_field', 'evaluate_density_details', 'evaluate_lcc_bounding_box'], required=True, help="[Required][General] Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=[
+        'evaluate_render_frame',
+        'evaluate_resimulation',
+        'export_density_field',
+        'export_velocity_field',
+        'evaluate_density_details',
+        'evaluate_lcc_bounding_box',
+        'evaluate_diff_density',
+    ], required=True, help="[Required][General] Choose the operation to execute.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
     parser.add_argument('--select_ckpt', action='store_true', help="[General] Select a pretrained checkpoint file.")
@@ -46,12 +54,13 @@ if __name__ == "__main__":
     print(f"==================== Running command: {args_str} ====================")
 
     checkpoint = torch.load(args.checkpoint, map_location=args.device, weights_only=True)
-    scene_name = checkpoint['config']['scene_name']
-    frame_start = int(checkpoint['config']['frame_start'])
-    frame_end = int(checkpoint['config']['frame_end'])
+    checkpoint_config = checkpoint.get('config', {})
+    scene_name = checkpoint_config.get('scene_name', 'unknown_scene')
+    frame_start = int(checkpoint_config.get('frame_start', 0))
+    frame_end = int(checkpoint_config.get('frame_end', 0))
     total_frames = frame_end - frame_start
     print(f"==================== Evaluating: {scene_name} ====================")
-    print(f"Checkpoint Information: {checkpoint['config']}, frame_start: {frame_start}, frame_end: {frame_end}")
+    print(f"Checkpoint Information: {checkpoint_config}, frame_start: {frame_start}, frame_end: {frame_end}")
 
     evaluation_config = EvaluationConfig(
         evaluation_script=args_str,
@@ -224,5 +233,27 @@ if __name__ == "__main__":
                 bbox_max=bbox_max_list_smoothed_ceil[sample_idx],
             )
             sample_idx += 1
+
+    if args.option == 'evaluate_diff_density':
+        model = EvaluationDiscreteSpatial(evaluation_config, args.resx, args.resy, args.resz)
+        if args.frame == -1:
+            for _ in tqdm.trange(frame_start, frame_end):
+                raw_d, d_x, d_y, d_z, d_t = model.sample_diff_density_grid(frame_normalized=float(_) / float(total_frames))
+                print(f"raw_d: {raw_d.shape}, d_x: {d_x.shape}, d_y: {d_y.shape}, d_z: {d_z.shape}, d_t: {d_t.shape}")
+                lib.utils.houdini.export_density_field(
+                    den=raw_d,
+                    save_path=f"ckpt/{scene_name}/{model.tag}/export",
+                    surname=f"density_{_ + 1:03d}",
+                    local2world=model.s2w,
+                    scale=model.s_scale,
+                )
+        else:
+            lib.utils.houdini.export_density_field(
+                den=model.sample_density_grid(frame_normalized=float(args.frame) / float(total_frames)),
+                save_path=f"ckpt/{scene_name}/{model.tag}/export",
+                surname=f"density_{args.frame:03d}",
+                local2world=model.s2w,
+                scale=model.s_scale,
+            )
 
     print("==================== Evaluation completed. ====================")

@@ -73,7 +73,7 @@ class _EvaluationModelBase:
             self.encoder_d.load_state_dict(checkpoint['encoder_d'])
             self.model_v.load_state_dict(checkpoint['model_v'])
             self.encoder_v.load_state_dict(checkpoint['encoder_v'])
-            self.tag = checkpoint['config']['train_tag']
+            self.tag = checkpoint.get('config', {}).get('train_tag', None)
             print(f"loaded checkpoint from {path}, TAG: {self.tag}")
             print("Model loaded successfully!")
         except Exception as e:
@@ -186,6 +186,45 @@ class EvaluationDiscreteSpatial(_EvaluationModelBase):
             raw_d_flat[~self.bbox_mask_flat] = 0.0
             raw_d = raw_d_flat.reshape(self.resx, self.resy, self.resz, 1)
             return raw_d
+
+    @torch.compile
+    def sample_diff_density_grid(self, frame_normalized):
+        def g(x):
+            return self.model_d(x)
+
+        input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * frame_normalized], dim=-1).reshape(-1, 4)
+        input_xyzt_flat.requires_grad = True
+
+        raw_d_flat_list, d_x_list, d_y_list, d_z_list, d_t_list = [], [], [], [], []
+        batch_size = 64 * 64 * 64
+        for i in range(0, input_xyzt_flat.shape[0], batch_size):
+            input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
+            hidden = self.encoder_d(input_xyzt_flat_batch)
+            raw_d_flat_batch = self.model_d(hidden)[..., 0]
+
+            jac = torch.vmap(torch.func.jacrev(g))(hidden)
+            jac_x = get_minibatch_jacobian(hidden, input_xyzt_flat_batch)
+            jac = jac @ jac_x
+            _d_x, _d_y, _d_z, _d_t = [torch.squeeze(_, -1) for _ in jac.split(1, dim=-1)]
+            d_x_list.append(_d_x)
+            d_y_list.append(_d_y)
+            d_z_list.append(_d_z)
+            d_t_list.append(_d_t)
+
+            raw_d_flat_list.append(raw_d_flat_batch)
+        raw_d_flat = torch.cat(raw_d_flat_list, dim=0)
+        d_x_flat = torch.cat(d_x_list, dim=0)
+        d_y_flat = torch.cat(d_y_list, dim=0)
+        d_z_flat = torch.cat(d_z_list, dim=0)
+        d_t_flat = torch.cat(d_t_list, dim=0)
+
+        # raw_d_flat[~self.bbox_mask_flat] = 0.0 # no need for filter
+        raw_d = raw_d_flat.reshape(self.resx, self.resy, self.resz, 1)
+        d_x = d_x_flat.reshape(self.resx, self.resy, self.resz, 1)
+        d_y = d_y_flat.reshape(self.resx, self.resy, self.resz, 1)
+        d_z = d_z_flat.reshape(self.resx, self.resy, self.resz, 1)
+        d_t = d_t_flat.reshape(self.resx, self.resy, self.resz, 1)
+        return raw_d, d_x, d_y, d_z, d_t
 
     @torch.compile
     def sample_velocity_grid(self, frame_normalized):

@@ -282,4 +282,8 @@ if __name__ == "__main__":
             pretrained_ckpt=args.checkpoint,
         )
 
+    print("\033[31m红色文字\033[0m")
+    print("\033[32m绿色文字\033[0m")
+    print("\033[33m黄色文字\033[0m")
+    print("\033[34m蓝色文字\033[0m")
     print("==================== Training completed. ====================")
