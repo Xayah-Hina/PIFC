@@ -288,42 +288,42 @@ if __name__ == "__main__":
             print(f"raw_d: {raw_d.shape}, d_x: {d_x.shape}, d_y: {d_y.shape}, d_z: {d_z.shape}, d_t: {d_t.shape}")
             d_density = torch.cat([d_x, d_y, d_z], dim=-1)
             lib.utils.houdini.export_density_field(
-                den=raw_d.detach(),
+                den=raw_d,
                 save_path=f"ckpt/{scene_name}/{model.tag}/export",
                 surname=f"density_{args.frame + 1:03d}",
                 local2world=model.s2w,
                 scale=model.s_scale,
             )
             lib.utils.houdini.export_density_field(
-                den=d_x.detach(),
+                den=d_x,
                 save_path=f"ckpt/{scene_name}/{model.tag}/export",
                 surname=f"d_x_{args.frame + 1:03d}",
                 local2world=model.s2w,
                 scale=model.s_scale,
             )
             lib.utils.houdini.export_density_field(
-                den=d_y.detach(),
+                den=d_y,
                 save_path=f"ckpt/{scene_name}/{model.tag}/export",
                 surname=f"d_y_{args.frame + 1:03d}",
                 local2world=model.s2w,
                 scale=model.s_scale,
             )
             lib.utils.houdini.export_density_field(
-                den=d_z.detach(),
+                den=d_z,
                 save_path=f"ckpt/{scene_name}/{model.tag}/export",
                 surname=f"d_z_{args.frame + 1:03d}",
                 local2world=model.s2w,
                 scale=model.s_scale,
             )
             lib.utils.houdini.export_density_field(
-                den=d_t.detach(),
+                den=d_t,
                 save_path=f"ckpt/{scene_name}/{model.tag}/export",
                 surname=f"d_t_{args.frame + 1:03d}",
                 local2world=model.s2w,
                 scale=model.s_scale,
             )
             lib.utils.houdini.export_velocity_field(
-                vel=d_density.detach(),
+                vel=d_density,
                 save_path=f"ckpt/{scene_name}/{model.tag}/export",
                 surname=f"d_density_{args.frame + 1:03d}",
                 local2world=model.s2w,

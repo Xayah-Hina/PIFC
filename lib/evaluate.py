@@ -205,12 +205,12 @@ class EvaluationDiscreteSpatial(_EvaluationModelBase):
             jac_x = get_minibatch_jacobian(hidden, input_xyzt_flat_batch)
             jac = jac @ jac_x
             _d_x, _d_y, _d_z, _d_t = [torch.squeeze(_, -1) for _ in jac.split(1, dim=-1)]
-            d_x_list.append(_d_x)
-            d_y_list.append(_d_y)
-            d_z_list.append(_d_z)
-            d_t_list.append(_d_t)
+            d_x_list.append(_d_x.detach().clone())
+            d_y_list.append(_d_y.detach().clone())
+            d_z_list.append(_d_z.detach().clone())
+            d_t_list.append(_d_t.detach().clone())
 
-            raw_d_flat_list.append(raw_d_flat_batch)
+            raw_d_flat_list.append(raw_d_flat_batch.detach().clone())
         raw_d_flat = torch.cat(raw_d_flat_list, dim=0)
         d_x_flat = torch.cat(d_x_list, dim=0)
         d_y_flat = torch.cat(d_y_list, dim=0)
