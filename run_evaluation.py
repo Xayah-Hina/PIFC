@@ -240,6 +240,7 @@ if __name__ == "__main__":
             for _ in tqdm.trange(frame_start, frame_end):
                 raw_d, d_x, d_y, d_z, d_t = model.sample_diff_density_grid(frame_normalized=float(_) / float(total_frames))
                 print(f"raw_d: {raw_d.shape}, d_x: {d_x.shape}, d_y: {d_y.shape}, d_z: {d_z.shape}, d_t: {d_t.shape}")
+                d_density = torch.cat([d_x, d_y, d_z], dim=-1)
                 lib.utils.houdini.export_density_field(
                     den=raw_d,
                     save_path=f"ckpt/{scene_name}/{model.tag}/export",
@@ -247,11 +248,84 @@ if __name__ == "__main__":
                     local2world=model.s2w,
                     scale=model.s_scale,
                 )
+                lib.utils.houdini.export_density_field(
+                    den=d_x,
+                    save_path=f"ckpt/{scene_name}/{model.tag}/export",
+                    surname=f"d_x_{_ + 1:03d}",
+                    local2world=model.s2w,
+                    scale=model.s_scale,
+                )
+                lib.utils.houdini.export_density_field(
+                    den=d_y,
+                    save_path=f"ckpt/{scene_name}/{model.tag}/export",
+                    surname=f"d_y_{_ + 1:03d}",
+                    local2world=model.s2w,
+                    scale=model.s_scale,
+                )
+                lib.utils.houdini.export_density_field(
+                    den=d_z,
+                    save_path=f"ckpt/{scene_name}/{model.tag}/export",
+                    surname=f"d_z_{_ + 1:03d}",
+                    local2world=model.s2w,
+                    scale=model.s_scale,
+                )
+                lib.utils.houdini.export_density_field(
+                    den=d_t,
+                    save_path=f"ckpt/{scene_name}/{model.tag}/export",
+                    surname=f"d_t_{_ + 1:03d}",
+                    local2world=model.s2w,
+                    scale=model.s_scale,
+                )
+                lib.utils.houdini.export_velocity_field(
+                    vel=d_density,
+                    save_path=f"ckpt/{scene_name}/{model.tag}/export",
+                    surname=f"d_density_{_ + 1:03d}",
+                    local2world=model.s2w,
+                    scale=model.s_scale,
+                )
         else:
+            raw_d, d_x, d_y, d_z, d_t = model.sample_diff_density_grid(frame_normalized=float(args.frame) / float(total_frames))
+            print(f"raw_d: {raw_d.shape}, d_x: {d_x.shape}, d_y: {d_y.shape}, d_z: {d_z.shape}, d_t: {d_t.shape}")
+            d_density = torch.cat([d_x, d_y, d_z], dim=-1)
             lib.utils.houdini.export_density_field(
-                den=model.sample_density_grid(frame_normalized=float(args.frame) / float(total_frames)),
+                den=raw_d,
                 save_path=f"ckpt/{scene_name}/{model.tag}/export",
-                surname=f"density_{args.frame:03d}",
+                surname=f"density_{_ + 1:03d}",
+                local2world=model.s2w,
+                scale=model.s_scale,
+            )
+            lib.utils.houdini.export_density_field(
+                den=d_x,
+                save_path=f"ckpt/{scene_name}/{model.tag}/export",
+                surname=f"d_x_{_ + 1:03d}",
+                local2world=model.s2w,
+                scale=model.s_scale,
+            )
+            lib.utils.houdini.export_density_field(
+                den=d_y,
+                save_path=f"ckpt/{scene_name}/{model.tag}/export",
+                surname=f"d_y_{_ + 1:03d}",
+                local2world=model.s2w,
+                scale=model.s_scale,
+            )
+            lib.utils.houdini.export_density_field(
+                den=d_z,
+                save_path=f"ckpt/{scene_name}/{model.tag}/export",
+                surname=f"d_z_{_ + 1:03d}",
+                local2world=model.s2w,
+                scale=model.s_scale,
+            )
+            lib.utils.houdini.export_density_field(
+                den=d_t,
+                save_path=f"ckpt/{scene_name}/{model.tag}/export",
+                surname=f"d_t_{_ + 1:03d}",
+                local2world=model.s2w,
+                scale=model.s_scale,
+            )
+            lib.utils.houdini.export_velocity_field(
+                vel=d_density,
+                save_path=f"ckpt/{scene_name}/{model.tag}/export",
+                surname=f"d_density_{_ + 1:03d}",
                 local2world=model.s2w,
                 scale=model.s_scale,
             )

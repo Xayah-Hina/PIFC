@@ -187,7 +187,6 @@ class EvaluationDiscreteSpatial(_EvaluationModelBase):
             raw_d = raw_d_flat.reshape(self.resx, self.resy, self.resz, 1)
             return raw_d
 
-    @torch.compile
     def sample_diff_density_grid(self, frame_normalized):
         def g(x):
             return self.model_d(x)
