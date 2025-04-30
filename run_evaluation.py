@@ -57,7 +57,7 @@ if __name__ == "__main__":
     checkpoint_config = checkpoint.get('config', {})
     scene_name = checkpoint_config.get('scene_name', 'unknown_scene')
     frame_start = int(checkpoint_config.get('frame_start', 0))
-    frame_end = int(checkpoint_config.get('frame_end', 0))
+    frame_end = int(checkpoint_config.get('frame_end', 120))
     total_frames = frame_end - frame_start
     print(f"==================== Evaluating: {scene_name} ====================")
     print(f"Checkpoint Information: {checkpoint_config}, frame_start: {frame_start}, frame_end: {frame_end}")
