@@ -223,7 +223,7 @@ if __name__ == "__main__":
         args.checkpoint = open_file_dialog()
 
     args_str = ' '.join([f'--{k}={v}' for k, v in vars(args).items()])
-    print(f"==================== Running command: {args_str} ====================")
+    print(f"\033[32m==================== Running command: {args_str} ====================\033[0m")
     train_config = TrainConfig(
         train_script=args_str,
         train_tag=args.tag,
@@ -286,4 +286,4 @@ if __name__ == "__main__":
     print("\033[32m绿色文字\033[0m")
     print("\033[33m黄色文字\033[0m")
     print("\033[34m蓝色文字\033[0m")
-    print("==================== Training completed. ====================")
+    print("\033[32m==================== Training completed. ====================\033[0m")
