@@ -51,7 +51,7 @@ if __name__ == "__main__":
     assert args.checkpoint is not None, "Checkpoint are required for evaluation."
 
     args_str = ' '.join([f'--{k}={v}' for k, v in vars(args).items()])
-    print(f"==================== Running command: {args_str} ====================")
+    print(f"\033[32m==================== Running command: {args_str} ====================\033[0m")
 
     checkpoint = torch.load(args.checkpoint, map_location=args.device, weights_only=True)
     checkpoint_config = checkpoint.get('config', {})
@@ -330,4 +330,4 @@ if __name__ == "__main__":
                 scale=model.s_scale,
             )
 
-    print("==================== Evaluation completed. ====================")
+    print("\033[32m==================== Evaluation completed. ====================\033[0m")

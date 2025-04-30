@@ -177,7 +177,7 @@ class EvaluationDiscreteSpatial(_EvaluationModelBase):
         with torch.no_grad():
             input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * frame_normalized], dim=-1).reshape(-1, 4)
             raw_d_flat_list = []
-            batch_size = 64 * 64 * 64
+            batch_size = 32 * 64 * 64
             for i in range(0, input_xyzt_flat.shape[0], batch_size):
                 input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
                 raw_d_flat_batch = self.model_d(self.encoder_d(input_xyzt_flat_batch))[..., 0]
@@ -195,7 +195,7 @@ class EvaluationDiscreteSpatial(_EvaluationModelBase):
         input_xyzt_flat.requires_grad = True
 
         raw_d_flat_list, d_x_list, d_y_list, d_z_list, d_t_list = [], [], [], [], []
-        batch_size = 64 * 64 * 64
+        batch_size = 32 * 64 * 64
         for i in range(0, input_xyzt_flat.shape[0], batch_size):
             input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
             hidden = self.encoder_d(input_xyzt_flat_batch)
@@ -230,7 +230,7 @@ class EvaluationDiscreteSpatial(_EvaluationModelBase):
         with torch.no_grad():
             input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * frame_normalized], dim=-1).reshape(-1, 4)
             raw_vel_flat_list = []
-            batch_size = 64 * 64 * 64
+            batch_size = 32 * 64 * 64
             for i in range(0, input_xyzt_flat.shape[0], batch_size):
                 input_xyzt_flat_batch = input_xyzt_flat[i:i + batch_size]
                 raw_vel_flat_batch, _ = self.model_v(self.encoder_v(input_xyzt_flat_batch))
