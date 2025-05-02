@@ -16,7 +16,7 @@ training_camera_calibrations:
   - data/plume_color_1/export_cam5.npz
 
 validation_camera_calibrations:
-  - data/plume_color_1/export_cam3.npz
+  - data/plume_color_1/export_cam4.npz
 
 voxel_transform:
   - [ 1.0, 0.0, 0.0, -0.4 ]
