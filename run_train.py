@@ -240,6 +240,8 @@ if __name__ == "__main__":
         loss_dict=loss_dict,
     )
 
+    print(f"\033[32m= Training On {train_config.scene_name} \033[0m")
+
     if args.option == "train_density_only":
         train_density_only(
             config=train_config,

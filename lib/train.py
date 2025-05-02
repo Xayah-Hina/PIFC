@@ -61,7 +61,7 @@ class _TrainModelBase:
     def _reinitialize(self, config):
         self._load_model(config.target_device, config.use_rgb)
         self._load_training_dataset(config.training_videos, config.training_camera_calibrations, config.frame_start, config.frame_end, config.ratio, config.target_device, config.target_dtype)
-        self._load_validation_dataset(config.validation_videos, config.validation_camera_calibrations, config.frame_start, config.frame_end, config.ratio, config.target_device, config.target_dtype)
+        # self._load_validation_dataset(config.validation_videos, config.validation_camera_calibrations, config.frame_start, config.frame_end, config.ratio, config.target_device, config.target_dtype)
 
         self.target_device = config.target_device
         self.target_dtype = config.target_dtype
@@ -117,10 +117,15 @@ class _TrainModelBase:
 
     def _next_batch(self, batch_size: int):
         if self.generator is None:
+            if self.videos_data_resampled is not None:
+                del self.videos_data_resampled
+                torch.cuda.empty_cache()
             self.generator, self.videos_data_resampled = refresh_generator(batch_size, self.videos_data, self.poses, self.focals, int(self.width[0].item()), int(self.height[0].item()), self.target_device, self.target_dtype)
         try:
             return next(self.generator)
         except StopIteration:
+            if self.videos_data_resampled is not None:
+                del self.videos_data_resampled
             self.generator, self.videos_data_resampled = refresh_generator(batch_size, self.videos_data, self.poses, self.focals, int(self.width[0].item()), int(self.height[0].item()), self.target_device, self.target_dtype)
             return next(self.generator)
 
