@@ -292,14 +292,18 @@ class TrainVelocityModel(_TrainModelBase):
         split_nse_wei = 0.001
         nseloss_fine = nse_errors * split_nse_wei
 
-        proj_loss = torch.zeros_like(nseloss_fine)
+        # proj_loss = torch.zeros_like(nseloss_fine)
 
-        viz_dens_mask = raw_d.detach() > 0.1
+        viz_dens_mask = raw_d.detach() > 1e-3
         vel_norm = raw_vel.norm(dim=-1, keepdim=True)
         min_vel_mask = vel_norm.detach() < 0.2 * raw_d.detach()
         vel_reg_mask = min_vel_mask & viz_dens_mask
         min_vel_reg_map = (0.2 * raw_d - vel_norm) * vel_reg_mask.float()
         min_vel_reg = min_vel_reg_map.pow(2).mean()
+
+        zero_dens_mask = raw_d.detach() < 1e-3
+        keep_zero_map = vel_norm * zero_dens_mask.float()
+        proj_loss = keep_zero_map.pow(2).mean()
 
         skip = False
         if nse_errors.sum() > 10000:
