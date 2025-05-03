@@ -104,6 +104,25 @@ if __name__ == "__main__":
                 os.makedirs(f'ckpt/{scene_name}/{model.tag}/render_frame', exist_ok=True)
                 imageio.imwrite(os.path.join(f'ckpt/{scene_name}/{model.tag}/render_frame', 'rgb_{:03d}.png'.format(args.frame)), rgb8)
 
+    if args.option == "evaluate_render_grids":
+        with torch.no_grad():
+            model = EvaluationDiscreteSpatial(evaluation_config, args.resx, args.resy, args.resz)
+            if args.frame == -1:
+                for f in tqdm.tqdm(list(reversed(range(frame_start, frame_end))), desc="Rendering frames", unit="frame"):
+                    den_grids = model.sample_density_grid(frame_normalized=float(f) / float(total_frames))
+                    rgb_map_final = model.render_frame_grid(den_grids, args.batch_ray_size, args.depth_size)
+                    rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
+                    os.makedirs(f'ckpt/{scene_name}/{model.tag}/render_grids', exist_ok=True)
+                    imageio.imwrite(os.path.join(f'ckpt/{scene_name}/{model.tag}/render_grids', 'rgb_{:03d}.png'.format(f)), rgb8)
+                    rgb8_list.append(rgb8)
+                imageiov2.mimsave(os.path.join(f'ckpt/{scene_name}/{model.tag}/render_grids', 'video_rgb.mp4'.format(f)), list(reversed(rgb8_list)), fps=24)
+            else:
+                den_grids = model.sample_density_grid(frame_normalized=float(args.frame) / float(total_frames))
+                rgb_map_final = model.render_frame_grid(den_grids, args.batch_ray_size, args.depth_size)
+                rgb8 = (255 * np.clip(rgb_map_final.cpu().numpy(), 0, 1)).astype(np.uint8)
+                os.makedirs(f'ckpt/{scene_name}/{model.tag}/render_grids', exist_ok=True)
+                imageio.imwrite(os.path.join(f'ckpt/{scene_name}/{model.tag}/render_grids', 'rgb_{:03d}.png'.format(args.frame)), rgb8)
+
     if args.option == "evaluate_resimulation":
         with torch.no_grad():
             model = EvaluationDiscreteSpatial(evaluation_config, args.resx, args.resy, args.resz)

@@ -172,6 +172,67 @@ class EvaluationDiscreteSpatial(_EvaluationModelBase):
 
         self.resx, self.resy, self.resz = resx, resy, resz
 
+    # @torch.compile
+    def render_frame_grid(self, density_grid, batch_ray_size: int, depth_size: int):
+        pose = self.poses_validation[0]
+        focal = self.focals_validation[0]
+        with torch.no_grad():
+            poses = pose.unsqueeze(0)
+            focals = focal.unsqueeze(0)
+
+            dirs, _, _ = shuffle_uv(focals=focals, width=self.width, height=self.height, randomize=False, device=self.target_device, dtype=self.target_dtype)
+            rays_d = torch.einsum('nij,nhwj->nhwi', poses[:, :3, :3], dirs)  # (1, H, W, 3)
+            rays_o = poses[:, None, None, :3, 3].expand(rays_d.shape)  # (1, H, W, 3)
+            rays_d = rays_d.reshape(-1, 3)  # (1*H*W, 3)
+            rays_o = rays_o.reshape(-1, 3)  # (1*H*W, 3)
+            total_ray_size = rays_d.shape[0]
+
+            final_rgb_map_list = []
+            for start_ray_index in range(0, total_ray_size, batch_ray_size):
+                batch_rays_d = rays_d[start_ray_index:start_ray_index + batch_ray_size]
+                batch_rays_o = rays_o[start_ray_index:start_ray_index + batch_ray_size]
+                batch_size_current = batch_rays_d.shape[0]
+
+                t_vals = torch.linspace(0., 1., steps=depth_size, device=self.target_device, dtype=self.target_dtype)
+                t_vals = t_vals.view(1, depth_size)
+                z_vals = self.near * (1. - t_vals) + self.far * t_vals
+                z_vals = z_vals.expand(batch_size_current, depth_size)
+
+                batch_dist_vals = z_vals[..., 1:] - z_vals[..., :-1]  # [batch_size_current, N_depths-1]
+                batch_points = batch_rays_o[:, None, :] + batch_rays_d[:, None, :] * z_vals[..., :, None]  # [batch_size_current, N_depths, 3]
+
+                batch_points_sim = world2sim(batch_points, self.s_w2s, self.s_scale)
+                batch_points_sim_sample = batch_points_sim * 2 - 1  # [batch_size_current, N_depths, 3]
+                batch_points_sim_sample_flat = batch_points_sim_sample.reshape(-1, 3)
+
+                bbox_mask = insideMask(batch_points_sim_sample_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+                batch_points_sim_sample_flat_filtered = batch_points_sim_sample_flat[bbox_mask]
+
+                vol = density_grid[None, ...].permute([0, 4, 3, 2, 1])  # [1, 1, resz, resy, resx]
+                grid = batch_points_sim_sample_flat_filtered[None, ..., None, None, :]  # [1, BATCH * DEPTH, 1, 1, 3]
+                den_sampled = torch.nn.functional.grid_sample(vol, grid, align_corners=True)
+
+                raw_flat = torch.zeros([batch_size_current * depth_size], device=self.target_device, dtype=self.target_dtype)
+                raw_d_flat = den_sampled.flatten()
+                raw_flat = raw_flat.masked_scatter(bbox_mask, raw_d_flat)
+                raw = raw_flat.reshape(batch_size_current, depth_size, 1)  # [batch_size_current, N_depths, 1]
+
+                dists_cat = torch.cat([batch_dist_vals, torch.tensor([1e10], device=self.target_device).expand(batch_dist_vals[..., :1].shape)], -1)  # [batch_size_current, N_depths]
+                dists_final = dists_cat * torch.norm(batch_rays_d[..., None, :], dim=-1)  # [batch_size_current, N_depths]
+
+                noise = 0.
+                alpha = 1. - torch.exp(-torch.nn.functional.relu(raw[..., -1] + noise) * dists_final)
+                weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1), device=self.target_device), 1. - alpha + 1e-10], -1), -1)[:, :-1]
+
+                # TODO: support color
+                rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
+                rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
+
+                final_rgb_map_list.append(rgb_map)
+
+            final_rgb_map = torch.cat(final_rgb_map_list, dim=0).reshape(self.height, self.width, 3)
+            return final_rgb_map
+
     @torch.compile
     def sample_density_grid(self, frame_normalized):
         with torch.no_grad():
