@@ -107,7 +107,11 @@ if __name__ == "__main__":
     if args.option == "evaluate_render_grids":
         with torch.no_grad():
             model = EvaluationDiscreteSpatial(evaluation_config, args.resx, args.resy, args.resz)
+            import imageio.v3 as imageio
+            import imageio.v2 as imageiov2
+
             if args.frame == -1:
+                rgb8_list = []
                 for f in tqdm.tqdm(list(reversed(range(frame_start, frame_end))), desc="Rendering frames", unit="frame"):
                     den_grids = model.sample_density_grid(frame_normalized=float(f) / float(total_frames))
                     rgb_map_final = model.render_frame_grid(den_grids, args.batch_ray_size, args.depth_size)

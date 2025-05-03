@@ -201,11 +201,11 @@ class EvaluationDiscreteSpatial(_EvaluationModelBase):
                 batch_dist_vals = z_vals[..., 1:] - z_vals[..., :-1]  # [batch_size_current, N_depths-1]
                 batch_points = batch_rays_o[:, None, :] + batch_rays_d[:, None, :] * z_vals[..., :, None]  # [batch_size_current, N_depths, 3]
 
+                bbox_mask = insideMask(batch_points, self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False).flatten()
+
                 batch_points_sim = world2sim(batch_points, self.s_w2s, self.s_scale)
                 batch_points_sim_sample = batch_points_sim * 2 - 1  # [batch_size_current, N_depths, 3]
                 batch_points_sim_sample_flat = batch_points_sim_sample.reshape(-1, 3)
-
-                bbox_mask = insideMask(batch_points_sim_sample_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
                 batch_points_sim_sample_flat_filtered = batch_points_sim_sample_flat[bbox_mask]
 
                 vol = density_grid[None, ...].permute([0, 4, 3, 2, 1])  # [1, 1, resz, resy, resx]
