@@ -34,6 +34,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run validation.")
     parser.add_argument('--option', type=str, choices=[
         'evaluate_render_frame',
+        'evaluate_render_grids',
         'evaluate_resimulation',
         'export_density_field',
         'export_velocity_field',
