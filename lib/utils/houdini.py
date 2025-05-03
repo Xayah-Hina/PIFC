@@ -14,7 +14,9 @@ def export_density_field(den, save_path, surname, local2world, scale):
 
     resx, resy, resz = den.shape[0], den.shape[1], den.shape[2]
     geo = hou.Geometry()
+    name_attrib = geo.addAttrib(hou.attribType.Prim, "name", "default")
     vol = geo.createVolume(resx, resy, resz, hou.BoundingBox(0.0, 0.0, 0.0, 1.0, 1.0, 1.0))
+    vol.setAttribValue(name_attrib, "density")
     vol.setAllVoxels(den.cpu().numpy().flatten().tolist())
     vol.setTransform(final_matrix)
     os.makedirs(save_path, exist_ok=True)
@@ -31,7 +33,9 @@ def export_density_field_with_bbox(den, save_path, surname, local2world, scale, 
 
     resx, resy, resz = den.shape[0], den.shape[1], den.shape[2]
     geo = hou.Geometry()
+    name_attrib = geo.addAttrib(hou.attribType.Prim, "name", "default")
     vol = geo.createVolume(resx, resy, resz, hou.BoundingBox(0.0, 0.0, 0.0, 1.0, 1.0, 1.0))
+    vol.setAttribValue(name_attrib, "density")
     vol.setAllVoxels(den.cpu().numpy().flatten().tolist())
     vol.setTransform(final_matrix)
 
