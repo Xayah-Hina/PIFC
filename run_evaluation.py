@@ -119,7 +119,7 @@ if __name__ == "__main__":
                 lib.utils.houdini.export_density_field(
                     den,
                     save_path=f"ckpt/{scene_name}/{model.tag}/resimulation",
-                    surname=f"density_{step:03d}",
+                    surname=f"density_{step + 1:03d}",
                     local2world=model.s2w,
                     scale=model.s_scale,
                 )
@@ -131,6 +131,8 @@ if __name__ == "__main__":
             den = model.sample_density_grid(frame_normalized=0.0)
             den_phi_tensor = math.tensor(den.squeeze(-1), spatial('x,y,z'))
             phi_smoke = CenteredGrid(den_phi_tensor, ZERO_GRADIENT, x=args.resx, y=args.resy, z=args.resz, bounds=Box(x=1, y=1, z=1))
+
+            mask_to_sim = model.coord_3d_sim[..., 1] > 0.15
             for step in tqdm.trange(frame_start, frame_end):
                 if step > frame_start:
                     vel = model.sample_velocity_grid(frame_normalized=float(step - 1) / float(total_frames))
@@ -138,10 +140,16 @@ if __name__ == "__main__":
                     phi_vel_tensor = math.tensor(vel_sim_confined, spatial('x,y,z'), channel('vector'))
                     phi_velocity = StaggeredGrid(phi_vel_tensor, 0, x=args.resx, y=args.resy, z=args.resz, bounds=Box(x=1, y=1, z=1))
                     phi_smoke = advect_step(phi_velocity, phi_smoke, dt)
+
+                    # replace out of mask
+                    source = model.sample_density_grid(frame_normalized=float(step) / float(total_frames)).squeeze(-1)
+                    den_masked = phi_smoke.data.native('x,y,z')
+                    den_masked[~mask_to_sim] = source[~mask_to_sim]
+                    phi_smoke = CenteredGrid(math.tensor(den_masked, spatial('x,y,z')), ZERO_GRADIENT, x=args.resx, y=args.resy, z=args.resz, bounds=Box(x=1, y=1, z=1))
                 lib.utils.houdini.export_density_field(
                     phi_smoke.data.native('x,y,z'),
                     save_path=f"ckpt/{scene_name}/{model.tag}/resimulation_phiflow",
-                    surname=f"density_{step:03d}",
+                    surname=f"density_{step + 1:03d}",
                     local2world=model.s2w,
                     scale=model.s_scale,
                 )
