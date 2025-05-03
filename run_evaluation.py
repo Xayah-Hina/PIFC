@@ -2,6 +2,7 @@ from lib.evaluate import *
 import lib.utils.houdini
 import tqdm
 import os
+from phi.torch.flow import *
 
 
 def open_file_dialog():
@@ -20,6 +21,12 @@ def open_file_dialog():
             print("invalid file path, please select a valid checkpoint file.")
 
 
+@jit_compile
+def advect_step(v, s, dt):
+    s = advect.mac_cormack(s, v, dt)
+    return s
+
+
 if __name__ == "__main__":
     torch.set_float32_matmul_precision('high')
     import argparse
@@ -33,6 +40,7 @@ if __name__ == "__main__":
         'evaluate_density_details',
         'evaluate_lcc_bounding_box',
         'evaluate_diff_density',
+        'evaluate_resimulation_test',
     ], required=True, help="[Required][General] Choose the operation to execute.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
@@ -111,6 +119,28 @@ if __name__ == "__main__":
                 lib.utils.houdini.export_density_field(
                     den,
                     save_path=f"ckpt/{scene_name}/{model.tag}/resimulation",
+                    surname=f"density_{step:03d}",
+                    local2world=model.s2w,
+                    scale=model.s_scale,
+                )
+
+    if args.option == 'evaluate_resimulation_test':
+        with torch.no_grad():
+            model = EvaluationDiscreteSpatial(evaluation_config, args.resx, args.resy, args.resz)
+            dt = 1.0 / float(total_frames - 1)
+            den = model.sample_density_grid(frame_normalized=0.0)
+            den_phi_tensor = math.tensor(den.squeeze(-1), spatial('x,y,z'))
+            phi_smoke = CenteredGrid(den_phi_tensor, ZERO_GRADIENT, x=args.resx, y=args.resy, z=args.resz, bounds=Box(x=1, y=1, z=1))
+            for step in tqdm.trange(frame_start, frame_end):
+                if step > frame_start:
+                    vel = model.sample_velocity_grid(frame_normalized=float(step - 1) / float(total_frames))
+                    vel_sim_confined = world2sim_rot(vel, model.s_w2s, model.s_scale)
+                    phi_vel_tensor = math.tensor(vel_sim_confined, spatial('x,y,z'), channel('vector'))
+                    phi_velocity = StaggeredGrid(phi_vel_tensor, 0, x=args.resx, y=args.resy, z=args.resz, bounds=Box(x=1, y=1, z=1))
+                    phi_smoke = advect_step(phi_velocity, phi_smoke, dt)
+                lib.utils.houdini.export_density_field(
+                    phi_smoke.data.native('x,y,z'),
+                    save_path=f"ckpt/{scene_name}/{model.tag}/resimulation_phiflow",
                     surname=f"density_{step:03d}",
                     local2world=model.s2w,
                     scale=model.s_scale,
