@@ -249,7 +249,7 @@ if __name__ == "__main__":
         bbox_min_list = []
         bbox_max_list = []
         for _ in tqdm.trange(frame_start, frame_end):
-            bbox_min, bbox_max, den = model.max_component_bounding_box(frame_normalized=float(_) / float(total_frames), threshold=1e-5, extrapolate=5)
+            bbox_min, bbox_max, den = model.max_component_bounding_box(frame_normalized=float(_) / float(total_frames), threshold=1e-3, extrapolate=8)
             den_list.append(den)
             bbox_min_list.append(bbox_min)
             bbox_max_list.append(bbox_max)
