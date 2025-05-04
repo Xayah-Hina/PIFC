@@ -600,7 +600,7 @@ class TrainJointLCCModel(_TrainModelBase):
 
         proj_loss = torch.zeros_like(nseloss_fine)
 
-        viz_dens_mask = raw_d.detach() > 0.1
+        viz_dens_mask = raw_d.detach() > 0.
         vel_norm = raw_vel.norm(dim=-1, keepdim=True)
         min_vel_mask = vel_norm.detach() < 0.2 * raw_d.detach()
         vel_reg_mask = min_vel_mask & viz_dens_mask
@@ -611,7 +611,7 @@ class TrainJointLCCModel(_TrainModelBase):
         if lcc_mask.all():
             lcc_loss = None
         else:
-            lcc_loss = torch.mean(vel_norm[~lcc_mask])
+            lcc_loss = split_nse_wei * torch.mean(vel_norm[~lcc_mask])
 
         skip = False
         if nse_errors.sum() > 10000:
