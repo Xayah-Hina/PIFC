@@ -32,6 +32,8 @@ class TrainConfig:
     frame_start: int
     frame_end: int
 
+    combined_encoding: bool
+
     loss_dict: dict = dataclasses.field(default_factory=dict)
 
     def __post_init__(self):
@@ -59,7 +61,7 @@ class _TrainModelBase:
         self._reinitialize(config)
 
     def _reinitialize(self, config):
-        self._load_model(config.target_device, config.use_rgb)
+        self._load_model(config.target_device, config.use_rgb, config.combined_encoding)
         self._load_training_dataset(config.training_videos, config.training_camera_calibrations, config.frame_start, config.frame_end, config.ratio, config.target_device, config.target_dtype)
         # self._load_validation_dataset(config.validation_videos, config.validation_camera_calibrations, config.frame_start, config.frame_end, config.ratio, config.target_device, config.target_dtype)
 
@@ -76,7 +78,7 @@ class _TrainModelBase:
         self.tag = config.train_tag
         self.config = config  # Don't use is unless save_ckpt
 
-    def _load_model(self, target_device: torch.device, use_rgb):
+    def _load_model(self, target_device: torch.device, use_rgb, combined_encoding):
         print("[>>> Initializing model... <<<]")
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
         if use_rgb:
@@ -84,7 +86,10 @@ class _TrainModelBase:
         else:
             self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
         self.optimizer_d = torch.optim.RAdam([{'params': self.model_d.parameters(), 'weight_decay': 1e-6}, {'params': self.encoder_d.parameters(), 'eps': 1e-15}], lr=0.001, betas=(0.9, 0.99))
-        self.encoder_v = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
+        if combined_encoding:
+            self.encoder_v = self.encoder_d
+        else:
+            self.encoder_v = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
         self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
         self.optimizer_v = torch.optim.RAdam([{'params': self.model_v.parameters(), 'weight_decay': 1e-6}, {'params': self.encoder_v.parameters(), 'eps': 1e-15}], lr=0.001, betas=(0.9, 0.99))
 

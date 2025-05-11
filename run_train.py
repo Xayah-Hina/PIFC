@@ -182,12 +182,22 @@ def train_joint_lcc(config: TrainConfig, lcc_path: str, total_iter: int, pretrai
         return saved_ckpt
 
 
+def train_joint_dissipation(config: TrainConfig):
+    pass
+
 if __name__ == "__main__":
     torch.set_float32_matmul_precision('high')
     import argparse
 
     parser = argparse.ArgumentParser(description="Run training.")
-    parser.add_argument('--option', type=str, choices=['train_density_only', 'train_velocity', 'train_velocity_lcc', 'train_joint', 'train_joint_lcc'], required=True, help="[Required][General] Choose the operation to execute.")
+    parser.add_argument('--option', type=str, choices=[
+        'train_density_only',
+        'train_velocity',
+        'train_velocity_lcc',
+        'train_joint',
+        'train_joint_lcc',
+        'train_joint_dissipation',
+    ], required=True, help="[Required][General] Choose the operation to execute.")
     parser.add_argument('--tag', type=str, default="DEFAULT", help="[General] Tag for the training run.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
@@ -209,6 +219,7 @@ if __name__ == "__main__":
     parser.add_argument('--lw_proj', type=float, default=1.0, help="[train_velocity only, train_joint] Weight for projection loss.")
     parser.add_argument('--lw_min_vel_reg', type=float, default=10.0, help="[train_velocity only, train_joint] Weight for minimum velocity regularization.")
     parser.add_argument('--lw_lcc', type=float, default=1.0, help="[train_velocity_lcc only, train_joint_lcc] Weight for LCC loss.")
+    parser.add_argument('--combined_encoding', type=bool, default=False, help="[General] Use combined encoding.")
     args = parser.parse_args()
 
     loss_dict = {
@@ -238,6 +249,7 @@ if __name__ == "__main__":
         frame_start=args.frame_start,
         frame_end=args.frame_end,
         loss_dict=loss_dict,
+        combined_encoding=args.combined_encoding,
     )
 
     print(f"\033[32m= Training On {train_config.scene_name} \033[0m")
@@ -283,6 +295,9 @@ if __name__ == "__main__":
             total_iter=args.total_iter,
             pretrained_ckpt=args.checkpoint,
         )
+
+    if args.option == "train_joint_dissipation":
+        pass
 
     print("\033[31m红色文字\033[0m")
     print("\033[32m绿色文字\033[0m")
