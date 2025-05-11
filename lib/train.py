@@ -173,11 +173,15 @@ class _TrainModelBase:
             # config = checkpoint['config']
             # config.target_device = device
             # self._reinitialize(config)
+            combined_encoding = checkpoint.get('combined_encoding', False)
             self.model_d.load_state_dict(checkpoint['model_d'])
             self.encoder_d.load_state_dict(checkpoint['encoder_d'])
             self.optimizer_d.load_state_dict(checkpoint['optimizer_d'])
             self.model_v.load_state_dict(checkpoint['model_v'])
-            self.encoder_v.load_state_dict(checkpoint['encoder_v'])
+            if combined_encoding:
+                self.encoder_v = self.encoder_d
+            else:
+                self.encoder_v.load_state_dict(checkpoint['encoder_v'])
             self.optimizer_v.load_state_dict(checkpoint['optimizer_v'])
             self.global_step = checkpoint['global_step']
             print(f"loaded checkpoint from {path}")
