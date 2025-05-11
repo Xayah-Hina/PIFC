@@ -219,7 +219,7 @@ if __name__ == "__main__":
     parser.add_argument('--lw_proj', type=float, default=1.0, help="[train_velocity only, train_joint] Weight for projection loss.")
     parser.add_argument('--lw_min_vel_reg', type=float, default=10.0, help="[train_velocity only, train_joint] Weight for minimum velocity regularization.")
     parser.add_argument('--lw_lcc', type=float, default=1.0, help="[train_velocity_lcc only, train_joint_lcc] Weight for LCC loss.")
-    parser.add_argument('--combined_encoding', type=bool, default=False, help="[General] Use combined encoding.")
+    parser.add_argument('--combined_encoding', action='store_true', help="[General] Use combined encoding.")
     args = parser.parse_args()
 
     loss_dict = {
