@@ -78,13 +78,13 @@ class _TrainModelBase:
         self.tag = config.train_tag
         self.config = config  # Don't use is unless save_ckpt
 
-    def _load_model(self, target_device: torch.device, target_dtype, use_rgb, combined_encoding):
+    def _load_model(self, target_device: torch.device, target_dtype: torch.dtype, use_rgb, combined_encoding):
         print("[>>> Initializing model... <<<]")
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device, dtype=target_dtype).to(target_device)
         if use_rgb:
-            self.model_d = NeRFSmall_c(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
+            self.model_d = NeRFSmall_c(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2, dtype=target_dtype).to(target_device)
         else:
-            self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
+            self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2, dtype=target_dtype).to(target_device)
         self.optimizer_d = torch.optim.RAdam([{'params': self.model_d.parameters(), 'weight_decay': 1e-6}, {'params': self.encoder_d.parameters(), 'eps': 1e-15}], lr=0.001, betas=(0.9, 0.99))
         if combined_encoding:
             self.encoder_v = self.encoder_d

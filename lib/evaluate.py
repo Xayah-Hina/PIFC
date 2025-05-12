@@ -48,7 +48,7 @@ class EvaluationConfig:
 class _EvaluationModelBase:
     def __init__(self, config):
         self.tag = 'DEFAULT_TAG'
-        self._load_model(config.target_device, config.use_rgb)
+        self._load_model(config.target_device, config.target_dtype, config.use_rgb)
         self._load_validation_dataset(config.validation_videos, config.validation_camera_calibrations, config.frame_start, config.frame_end, config.ratio, config.target_device, config.target_dtype)
         self.load_ckpt(config.pretrained_ckpt, config.target_device)
 
@@ -57,13 +57,13 @@ class _EvaluationModelBase:
         self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = config.s_w2s, config.s2w, config.s_scale, config.s_min, config.s_max
         self.ratio = config.ratio
 
-    def _load_model(self, target_device: torch.device, use_rgb):
-        self.encoder_d = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
+    def _load_model(self, target_device: torch.device, target_dtype: torch.dtype, use_rgb):
+        self.encoder_d = HashEncoderNativeFasterBackward(device=target_device, dtype=target_dtype).to(target_device)
         if use_rgb:
-            self.model_d = NeRFSmall_c(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
+            self.model_d = NeRFSmall_c(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2, dtype=target_dtype).to(target_device)
         else:
-            self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2).to(target_device)
-        self.encoder_v = HashEncoderNativeFasterBackward(device=target_device).to(target_device)
+            self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2, dtype=target_dtype).to(target_device)
+        self.encoder_v = HashEncoderNativeFasterBackward(device=target_device, dtype=target_dtype).to(target_device)
         self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
 
     def load_ckpt(self, path: str, device: torch.device):
