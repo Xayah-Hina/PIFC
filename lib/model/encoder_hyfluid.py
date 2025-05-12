@@ -12,6 +12,7 @@ class HashEncoderNativeFasterForward(torch.nn.Module):
             features_per_level: int = 2,
             hash_init_scale: float = 0.001,
             device=torch.device("cuda"),
+            dtype=torch.float32,
     ):
         super().__init__()
         self.device = device
@@ -27,7 +28,7 @@ class HashEncoderNativeFasterForward(torch.nn.Module):
         self.hash_table_size = 2 ** log2_hashmap_size
 
         # 根据 num_levels 计算分辨率增长因子和每层分辨率
-        levels = torch.arange(self.num_levels, dtype=torch.float32)
+        levels = torch.arange(self.num_levels, dtype=dtype)
         if self.num_levels > 1:
             self.growth_factor = np.exp((np.log(self.max_res) - np.log(self.min_res)) / (self.num_levels - 1))
         else:
@@ -36,7 +37,7 @@ class HashEncoderNativeFasterForward(torch.nn.Module):
         # 每个 level 的分辨率（保存在 GPU 上以便后续计算）
         self.scalings = torch.floor(
             self.min_res * (self.growth_factor ** levels)
-        ).to(device, dtype=torch.float32)  # [L]
+        ).to(device, dtype=dtype)  # [L]
 
         # 每一层在哈希表中的 offset
         self.hash_offset = torch.arange(self.num_levels, dtype=torch.int64, device=device) * self.hash_table_size
@@ -148,6 +149,7 @@ class HashEncoderNativeFasterBackward(torch.nn.Module):
             features_per_level: int = 2,
             hash_init_scale: float = 0.001,
             device=torch.device("cuda"),
+            dtype=torch.float32,
     ):
         super().__init__()
         self.device = device
@@ -160,10 +162,10 @@ class HashEncoderNativeFasterBackward(torch.nn.Module):
 
         levels = torch.arange(self.num_levels, device=device, dtype=torch.int32)
         self.growth_factor = torch.exp(
-            (torch.log(torch.tensor(self.max_res, dtype=torch.float32, device=device)) -
-             torch.log(torch.tensor(self.min_res, dtype=torch.float32, device=device))) /
+            (torch.log(torch.tensor(self.max_res, dtype=dtype, device=device)) -
+             torch.log(torch.tensor(self.min_res, dtype=dtype, device=device))) /
             (self.num_levels - 1)
-        ) if self.num_levels > 1 else torch.tensor(1.0, dtype=torch.float32, device=device)
+        ) if self.num_levels > 1 else torch.tensor(1.0, dtype=dtype, device=device)
 
         self.scalings = torch.floor(min_res * self.growth_factor ** levels)
         self.hash_offset = levels * self.hash_table_size
@@ -215,5 +217,5 @@ class HashEncoderNativeFasterBackward(torch.nn.Module):
 
 
 if __name__ == "__main__":
-    encoder = HashEncoderNativeFasterForward()
+    encoder = HashEncoderNativeFasterBackward()
     print(encoder)

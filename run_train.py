@@ -240,7 +240,7 @@ if __name__ == "__main__":
         train_tag=args.tag,
         scene_name=args.scene,
         target_device=torch.device(args.device),
-        target_dtype=torch.float32 if args.dtype == "float32" else torch.float16,
+        target_dtype=torch.float32 if args.dtype == "float32" else torch.float64,
         batch_size=args.batch_size,
         depth_size=args.depth_size,
         ratio=args.ratio,
