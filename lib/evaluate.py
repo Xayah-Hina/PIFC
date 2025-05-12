@@ -64,7 +64,7 @@ class _EvaluationModelBase:
         else:
             self.model_d = NeRFSmall(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_d.num_levels * 2, dtype=target_dtype).to(target_device)
         self.encoder_v = HashEncoderNativeFasterBackward(device=target_device, dtype=target_dtype).to(target_device)
-        self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
+        self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False, dtype=target_dtype).to(target_device)
 
     def load_ckpt(self, path: str, device: torch.device):
         try:

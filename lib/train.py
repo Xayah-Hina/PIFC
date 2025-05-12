@@ -90,7 +90,7 @@ class _TrainModelBase:
             self.encoder_v = self.encoder_d
         else:
             self.encoder_v = HashEncoderNativeFasterBackward(device=target_device, dtype=target_dtype).to(target_device)
-        self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False).to(target_device)
+        self.model_v = NeRFSmallPotential(num_layers=2, hidden_dim=64, geo_feat_dim=15, num_layers_color=2, hidden_dim_color=16, input_ch=self.encoder_v.num_levels * 2, use_f=False, dtype=target_dtype).to(target_device)
         self.optimizer_v = torch.optim.RAdam([{'params': self.model_v.parameters(), 'weight_decay': 1e-6}, {'params': self.encoder_v.parameters(), 'eps': 1e-15}], lr=0.001, betas=(0.9, 0.99))
 
         import math
