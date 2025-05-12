@@ -200,7 +200,7 @@ if __name__ == "__main__":
     ], required=True, help="[Required][General] Choose the operation to execute.")
     parser.add_argument('--tag', type=str, default="DEFAULT", help="[General] Tag for the training run.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
-    parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float16'], help="[General] Data type to use.")
+    parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float64'], help="[General] Data type to use.")
     parser.add_argument('--scene', type=str, choices=['hyfluid', 'plume_1', 'plume_5', 'plume_10', 'plume_11', 'plume_12', 'plume_color_1'], default="hyfluid", help="[General] Scene to run.")
     parser.add_argument('--frame_start', type=int, default=0, help="[General] Start frame for training.")
     parser.add_argument('--frame_end', type=int, default=120, help="[General] End frame for training.")
