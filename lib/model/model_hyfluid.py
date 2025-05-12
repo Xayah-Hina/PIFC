@@ -9,11 +9,12 @@ class NeRFSmall(torch.nn.Module):
                  num_layers_color=2,
                  hidden_dim_color=16,
                  input_ch=3,
+                 dtype=torch.float32,
                  ):
         super(NeRFSmall, self).__init__()
 
         self.input_ch = input_ch
-        self.rgb = torch.nn.Parameter(torch.tensor([0.0]))
+        self.rgb = torch.nn.Parameter(torch.tensor([0.0], dtype=dtype))
 
         # sigma network
         self.num_layers = num_layers
@@ -32,7 +33,7 @@ class NeRFSmall(torch.nn.Module):
             else:
                 out_dim = hidden_dim
 
-            sigma_net.append(torch.nn.Linear(in_dim, out_dim, bias=False))
+            sigma_net.append(torch.nn.Linear(in_dim, out_dim, bias=False, dtype=dtype))
 
         self.sigma_net = torch.nn.ModuleList(sigma_net)
 
@@ -48,7 +49,7 @@ class NeRFSmall(torch.nn.Module):
             else:
                 out_dim = hidden_dim_color
 
-            self.color_net.append(torch.nn.Linear(in_dim, out_dim, bias=True))
+            self.color_net.append(torch.nn.Linear(in_dim, out_dim, bias=True, dtype=dtype))
 
     def forward(self, x):
         h = x
@@ -68,12 +69,13 @@ class NeRFSmallPotential(torch.nn.Module):
                  num_layers_color=2,
                  hidden_dim_color=16,
                  input_ch=3,
-                 use_f=False
+                 use_f=False,
+                 dtype=torch.float32,
                  ):
         super(NeRFSmallPotential, self).__init__()
 
         self.input_ch = input_ch
-        self.rgb = torch.nn.Parameter(torch.tensor([0.0]))
+        self.rgb = torch.nn.Parameter(torch.tensor([0.0], dtype=dtype))
 
         # sigma network
         self.num_layers = num_layers
@@ -92,13 +94,13 @@ class NeRFSmallPotential(torch.nn.Module):
             else:
                 out_dim = hidden_dim
 
-            sigma_net.append(torch.nn.Linear(in_dim, out_dim, bias=False))
+            sigma_net.append(torch.nn.Linear(in_dim, out_dim, bias=False, dtype=dtype))
         self.sigma_net = torch.nn.ModuleList(sigma_net)
-        self.out = torch.nn.Linear(hidden_dim, 3, bias=True)
+        self.out = torch.nn.Linear(hidden_dim, 3, bias=True, dtype=dtype)
         self.use_f = use_f
         if use_f:
-            self.out_f = torch.nn.Linear(hidden_dim, hidden_dim, bias=True)
-            self.out_f2 = torch.nn.Linear(hidden_dim, 3, bias=True)
+            self.out_f = torch.nn.Linear(hidden_dim, hidden_dim, bias=True, dtype=dtype)
+            self.out_f2 = torch.nn.Linear(hidden_dim, 3, bias=True, dtype=dtype)
 
     def forward(self, x):
         h = x
@@ -124,11 +126,12 @@ class NeRFSmall_c(torch.nn.Module):
                  num_layers_color=2,
                  hidden_dim_color=16,
                  input_ch=3,
+                 dtype=torch.float32,
                  ):
         super(NeRFSmall_c, self).__init__()
 
         self.input_ch = input_ch
-        self.rgb = torch.nn.Parameter(torch.tensor([0.0]))
+        self.rgb = torch.nn.Parameter(torch.tensor([0.0], dtype=dtype))
 
         # sigma network
         self.num_layers = num_layers
@@ -148,7 +151,7 @@ class NeRFSmall_c(torch.nn.Module):
             else:
                 out_dim = hidden_dim
 
-            sigma_net.append(torch.nn.Linear(in_dim, out_dim, bias=False))
+            sigma_net.append(torch.nn.Linear(in_dim, out_dim, bias=False, dtype=dtype))
 
         self.sigma_net = torch.nn.ModuleList(sigma_net)
 
@@ -164,7 +167,7 @@ class NeRFSmall_c(torch.nn.Module):
             else:
                 out_dim = hidden_dim_color
 
-            self.color_net.append(torch.nn.Linear(in_dim, out_dim, bias=True))
+            self.color_net.append(torch.nn.Linear(in_dim, out_dim, bias=True, dtype=dtype))
         self.color_net = torch.nn.ModuleList(self.color_net)
 
     def forward(self, x):
