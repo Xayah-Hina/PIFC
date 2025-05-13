@@ -47,11 +47,10 @@ def train_density_only(config: TrainConfig, total_iter: int, pretrained_ckpt=Non
                 model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
     except Exception as e:
         print(e)
-    finally:
-        final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
-        saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
-        writer.close()
-        return saved_ckpt
+    final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
+    saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
+    writer.close()
+    return saved_ckpt
 
 
 def train_velocity(config: TrainConfig, pretrain_density: int, resx: int, resy: int, resz: int, total_iter: int, pretrained_ckpt=None):
@@ -78,11 +77,10 @@ def train_velocity(config: TrainConfig, pretrain_density: int, resx: int, resy: 
                 model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
     except Exception as e:
         print(e)
-    finally:
-        final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
-        saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
-        writer.close()
-        return saved_ckpt
+    final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
+    saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
+    writer.close()
+    return saved_ckpt
 
 
 def train_velocity_lcc(config: TrainConfig, lcc_path: str, pretrain_density: int, total_iter: int, pretrained_ckpt=None):
@@ -111,11 +109,10 @@ def train_velocity_lcc(config: TrainConfig, lcc_path: str, pretrain_density: int
                 model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
     except Exception as e:
         print(e)
-    finally:
-        final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
-        saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
-        writer.close()
-        return saved_ckpt
+    final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
+    saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
+    writer.close()
+    return saved_ckpt
 
 
 def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
@@ -142,11 +139,10 @@ def train_joint(config: TrainConfig, total_iter: int, pretrained_ckpt=None):
                 model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
     except Exception as e:
         print(e)
-    finally:
-        final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
-        saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
-        writer.close()
-        return saved_ckpt
+    final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
+    saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
+    writer.close()
+    return saved_ckpt
 
 
 def train_joint_lcc(config: TrainConfig, lcc_path: str, total_iter: int, pretrained_ckpt=None):
@@ -175,15 +171,15 @@ def train_joint_lcc(config: TrainConfig, lcc_path: str, total_iter: int, pretrai
                 model.save_ckpt(f'ckpt/{config.scene_name}/{get_current_function_name()}', final=False)
     except Exception as e:
         print(e)
-    finally:
-        final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
-        saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
-        writer.close()
-        return saved_ckpt
+    final_ckpt_path = f'ckpt/{config.scene_name}/{get_current_function_name()}'
+    saved_ckpt = model.save_ckpt(final_ckpt_path, final=False)
+    writer.close()
+    return saved_ckpt
 
 
 def train_joint_dissipation(config: TrainConfig):
     pass
+
 
 if __name__ == "__main__":
     torch.set_float32_matmul_precision('high')
