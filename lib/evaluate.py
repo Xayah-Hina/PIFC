@@ -98,7 +98,7 @@ class EvaluationRenderFrame(_EvaluationModelBase):
     def __init__(self, config: EvaluationConfig):
         super().__init__(config)
 
-    @torch.compile
+    # @torch.compile
     def render_frame(self, batch_ray_size: int, depth_size: int, frame_normalized: float):
         pose = self.poses_validation[0]
         focal = self.focals_validation[0]
@@ -241,7 +241,7 @@ class EvaluationDiscreteSpatial(_EvaluationModelBase):
             final_rgb_map = torch.cat(final_rgb_map_list, dim=0).reshape(self.height, self.width, 3)
             return final_rgb_map
 
-    @torch.compile
+    # @torch.compile
     def sample_density_grid(self, frame_normalized):
         with torch.no_grad():
             input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * frame_normalized], dim=-1).reshape(-1, 4)
@@ -294,7 +294,7 @@ class EvaluationDiscreteSpatial(_EvaluationModelBase):
         d_t = d_t_flat.reshape(self.resx, self.resy, self.resz, 1)
         return raw_d, d_x, d_y, d_z, d_t
 
-    @torch.compile
+    # @torch.compile
     def sample_velocity_grid(self, frame_normalized):
         with torch.no_grad():
             input_xyzt_flat = torch.cat([self.coord_3d_world, torch.ones_like(self.coord_3d_world[..., :1]) * frame_normalized], dim=-1).reshape(-1, 4)
@@ -309,7 +309,7 @@ class EvaluationDiscreteSpatial(_EvaluationModelBase):
             raw_vel = raw_vel_flat.reshape(self.resx, self.resy, self.resz, 3)
             return raw_vel
 
-    @torch.compile
+    # @torch.compile
     def advect_density(self, den, vel, source, dt, mask_to_sim):
         with torch.no_grad():
             den = advect_maccormack(den, vel, self.coord_3d_sim, dt)

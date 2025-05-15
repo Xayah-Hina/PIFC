@@ -199,7 +199,7 @@ if __name__ == "__main__":
     parser.add_argument('--tag', type=str, default="DEFAULT", help="[General] Tag for the training run.")
     parser.add_argument('--device', type=str, default="cuda:0", help="[General] Device to run the operation.")
     parser.add_argument('--dtype', type=str, default="float32", choices=['float32', 'float64'], help="[General] Data type to use.")
-    parser.add_argument('--scene', type=str, choices=['hyfluid', 'plume_1', 'plume_5', 'plume_10', 'plume_11', 'plume_12', 'plume_color_1', 'sphere'], default="hyfluid", help="[General] Scene to run.")
+    parser.add_argument('--scene', type=str, choices=['hyfluid', 'plume_1', 'plume_5', 'plume_10', 'plume_11', 'plume_12', 'plume_color_1', 'sphere', 'game'], default="hyfluid", help="[General] Scene to run.")
     parser.add_argument('--frame_start', type=int, default=0, help="[General] Start frame for training.")
     parser.add_argument('--frame_end', type=int, default=120, help="[General] End frame for training.")
     parser.add_argument('--batch_size', type=int, default=512, help="[General] Batch size for training.")
@@ -250,7 +250,7 @@ if __name__ == "__main__":
         depth_size=args.depth_size,
         ratio=args.ratio,
         mid_ckpts_iters=args.mid_ckpt_iters,
-        use_rgb=args.scene == "plume_color_1" or args.scene == "sphere",
+        use_rgb=args.scene == "plume_color_1" or args.scene == "sphere" or args.scene == "game",
         frame_start=args.frame_start,
         frame_end=args.frame_end,
         loss_dict=loss_dict,
