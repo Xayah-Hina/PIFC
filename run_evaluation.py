@@ -68,6 +68,7 @@ if __name__ == "__main__":
     frame_start = int(checkpoint_config.get('frame_start', 0))
     frame_end = int(checkpoint_config.get('frame_end', 120))
     total_frames = frame_end - frame_start
+    background_color = checkpoint_config.get('background_color', None)
     print(f"==================== Evaluating: {scene_name} ====================")
     print(f"Checkpoint Information: {checkpoint_config}, frame_start: {frame_start}, frame_end: {frame_end}")
 
@@ -81,6 +82,7 @@ if __name__ == "__main__":
         use_rgb=scene_name == "plume_color_1",
         frame_start=frame_start,
         frame_end=frame_end,
+        background_color=background_color,
     )
 
     if args.option == "evaluate_render_frame":
