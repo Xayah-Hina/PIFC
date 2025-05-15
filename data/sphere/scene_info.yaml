@@ -1,0 +1,29 @@
+training_videos:
+  - data/sphere/train00.mp4
+  - data/sphere/train01.mp4
+  - data/sphere/train02.mp4
+  - data/sphere/train03.mp4
+  - data/sphere/train04.mp4
+
+validation_videos:
+  - data/sphere/train02.mp4
+
+training_camera_calibrations:
+  - data/sphere/cam_train00.npz
+  - data/sphere/cam_train01.npz
+  - data/sphere/cam_train02.npz
+  - data/sphere/cam_train03.npz
+  - data/sphere/cam_train04.npz
+
+validation_camera_calibrations:
+  - data/sphere/cam_train02.npz
+
+voxel_transform:
+  - [ 1.0, 0.0, 7.549790126404332e-08, 0.081816665828228 ]
+  - [ 0.0, 1.0, 0.0, -0.044627271592617035 ]
+  - [ 7.549790126404332e-08, 0.0, -1.0, -0.004908999893814325 ]
+  - [ 0.0, 0.0, 0.0, 1.0 ]
+
+voxel_scale: [ 12.0064, 12.0064, 12.0064 ]
+s_min: [ 0.0, 0.0, 0.0 ]
+s_max: [ 1.0, 1.0, 1.0 ]
