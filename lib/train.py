@@ -34,6 +34,8 @@ class TrainConfig:
 
     combined_encoding: bool
 
+    background_color: torch.Tensor = None
+
     loss_dict: dict = dataclasses.field(default_factory=dict)
 
     def __post_init__(self):
@@ -76,6 +78,8 @@ class _TrainModelBase:
         self.frame_start, self.frame_end = config.frame_start, config.frame_end
 
         self.tag = config.train_tag
+        self.background_color = config.background_color
+
         self.config = config  # Don't use is unless save_ckpt
 
     def _load_model(self, target_device: torch.device, target_dtype: torch.dtype, use_rgb, combined_encoding):
@@ -194,7 +198,7 @@ class TrainDensityModel(_TrainModelBase):
     def __init__(self, config: TrainConfig):
         super().__init__(config)
 
-    @torch.compile
+    # @torch.compile
     def image_loss(self, batch_indices: torch.Tensor, batch_rays_o: torch.Tensor, batch_rays_d: torch.Tensor, depth_size: int, near: float, far: float):
         batch_time, batch_target_pixels = sample_random_frame(videos_data=self.videos_data_resampled, batch_indices=batch_indices, device=self.target_device, dtype=self.target_dtype)
         batch_size_current = batch_rays_d.shape[0]
@@ -243,8 +247,11 @@ class TrainDensityModel(_TrainModelBase):
             rgb = torch.sigmoid(rgb_flat.reshape(batch_size_current, depth_size, 3))
             rgb_map = torch.sum(weights[..., None] * rgb, dim=-2)
 
-        img_loss = torch.nn.functional.mse_loss(rgb_map, batch_target_pixels)
+        if self.background_color:
+            acc_map = torch.sum(weights, -1)
+            rgb_map = rgb_map + self.background_color * (1.0 - acc_map[..., None])
 
+        img_loss = torch.nn.functional.mse_loss(rgb_map, batch_target_pixels)
         return img_loss
 
     def forward(self, batch_size: int, depth_size: int):
@@ -645,3 +652,71 @@ class TrainJointLCCModel(_TrainModelBase):
         self.scheduler_v.step()
         self.global_step += 1
         return vel_loss, nseloss_fine, img_loss, proj_loss, min_vel_reg, lcc_loss
+
+
+class TrainHybridDensityModel(_TrainModelBase):
+    def __init__(self, config: TrainConfig):
+        super().__init__(config)
+
+    # @torch.compile
+    def image_loss(self, batch_indices: torch.Tensor, batch_rays_o: torch.Tensor, batch_rays_d: torch.Tensor, depth_size: int, near: float, far: float):
+        batch_time, batch_target_pixels = sample_random_frame(videos_data=self.videos_data_resampled, batch_indices=batch_indices, device=self.target_device, dtype=self.target_dtype)
+        batch_size_current = batch_rays_d.shape[0]
+
+        t_vals = torch.linspace(0., 1., steps=depth_size, device=self.target_device, dtype=self.target_dtype)
+        t_vals = t_vals.view(1, depth_size)
+        z_vals = near * (1. - t_vals) + far * t_vals
+        z_vals = z_vals.expand(batch_size_current, depth_size)
+
+        mid_vals = .5 * (z_vals[..., 1:] + z_vals[..., :-1])
+        upper_vals = torch.cat([mid_vals, z_vals[..., -1:]], -1)
+        lower_vals = torch.cat([z_vals[..., :1], mid_vals], -1)
+        t_rand = torch.rand(z_vals.shape, device=self.target_device, dtype=self.target_dtype)
+        z_vals = lower_vals + (upper_vals - lower_vals) * t_rand
+
+        batch_dist_vals = z_vals[..., 1:] - z_vals[..., :-1]  # [batch_size_current, N_depths-1]
+        batch_points = batch_rays_o[:, None, :] + batch_rays_d[:, None, :] * z_vals[..., :, None]  # [batch_size_current, N_depths, 3]
+        batch_points_time = torch.cat([batch_points, batch_time.expand(batch_points[..., :1].shape)], dim=-1)
+        batch_points_time_flat = batch_points_time.reshape(-1, 4)
+
+        bbox_mask = insideMask(batch_points_time_flat[..., :3], self.s_w2s, self.s_scale, self.s_min, self.s_max, to_float=False)
+        batch_points_time_flat_filtered = batch_points_time_flat[bbox_mask]
+
+        hidden = self.encoder_d(batch_points_time_flat_filtered)
+        raw_d = self.model_d(hidden)
+        raw_flat = torch.zeros([batch_size_current * depth_size], device=self.target_device, dtype=self.target_dtype)
+        raw_d_flat = raw_d[..., 0].view(-1)
+        raw_flat = raw_flat.masked_scatter(bbox_mask, raw_d_flat)
+        raw = raw_flat.reshape(batch_size_current, depth_size, 1)
+
+        dists_cat = torch.cat([batch_dist_vals, torch.tensor([1e10], device=self.target_device).expand(batch_dist_vals[..., :1].shape)], -1)  # [batch_size_current, N_depths]
+        dists_final = dists_cat * torch.norm(batch_rays_d[..., None, :], dim=-1)  # [batch_size_current, N_depths]
+
+        noise = 0.
+        alpha = 1. - torch.exp(-torch.nn.functional.relu(raw[..., -1] + noise) * dists_final)
+        weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1), device=self.target_device), 1. - alpha + 1e-10], -1), -1)[:, :-1]
+
+        if raw_d.shape[-1] == 1:
+            rgb_trained = torch.ones(3, device=self.target_device) * (0.6 + torch.tanh(self.model_d.rgb) * 0.4)
+            rgb_map = torch.sum(weights[..., None] * rgb_trained, -2)
+        else:
+            rgb_flat = torch.zeros([batch_size_current * depth_size, 3], device=self.target_device, dtype=self.target_dtype)
+            rgb_valid_flat = raw_d[..., 1:].reshape(-1, 3)
+            for i in range(3):
+                rgb_flat[:, i] = rgb_flat[:, i].masked_scatter(bbox_mask, rgb_valid_flat[:, i])
+            rgb = torch.sigmoid(rgb_flat.reshape(batch_size_current, depth_size, 3))
+            rgb_map = torch.sum(weights[..., None] * rgb, dim=-2)
+
+        img_loss = torch.nn.functional.mse_loss(rgb_map, batch_target_pixels)
+
+        return img_loss
+
+    def forward(self, batch_size: int, depth_size: int):
+        self.optimizer_d.zero_grad()
+        batch_indices, batch_rays_o, batch_rays_d = self._next_batch(batch_size)
+        img_loss = self.image_loss(batch_indices, batch_rays_o, batch_rays_d, depth_size, float(self.near[0].item()), float(self.far[0].item()))
+        img_loss.backward()
+        self.optimizer_d.step()
+        self.scheduler_d.step()
+        self.global_step += 1
+        return img_loss

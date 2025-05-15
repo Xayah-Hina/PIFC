@@ -1,3 +1,5 @@
+import torch
+
 from lib.train import *
 import tqdm
 
@@ -216,6 +218,7 @@ if __name__ == "__main__":
     parser.add_argument('--lw_min_vel_reg', type=float, default=10.0, help="[train_velocity only, train_joint] Weight for minimum velocity regularization.")
     parser.add_argument('--lw_lcc', type=float, default=1.0, help="[train_velocity_lcc only, train_joint_lcc] Weight for LCC loss.")
     parser.add_argument('--combined_encoding', action='store_true', help="[General] Use combined encoding.")
+    parser.add_argument('--background_color', type=str, default="transparent", choices=['transparent', 'white', 'black'], help="[General] Background color for rendering.")
     args = parser.parse_args()
 
     loss_dict = {
@@ -224,6 +227,12 @@ if __name__ == "__main__":
         "lw_proj": args.lw_proj,
         "lw_min_vel_reg": args.lw_min_vel_reg,
         "lw_lcc": args.lw_lcc,
+    }
+
+    background_color_dict = {
+        "white": torch.tensor([1.0, 1.0, 1.0]),
+        "black": torch.tensor([0.0, 0.0, 0.0]),
+        "transparent": None,
     }
 
     if args.select_ckpt and args.checkpoint is None:
@@ -246,6 +255,7 @@ if __name__ == "__main__":
         frame_end=args.frame_end,
         loss_dict=loss_dict,
         combined_encoding=args.combined_encoding,
+        background_color=background_color_dict[args.background_color],
     )
 
     print(f"\033[32m= Training On {train_config.scene_name} \033[0m")
