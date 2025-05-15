@@ -250,7 +250,7 @@ if __name__ == "__main__":
         depth_size=args.depth_size,
         ratio=args.ratio,
         mid_ckpts_iters=args.mid_ckpt_iters,
-        use_rgb=args.scene == "plume_color_1",
+        use_rgb=args.scene == "plume_color_1" or args.scene == "sphere",
         frame_start=args.frame_start,
         frame_end=args.frame_end,
         loss_dict=loss_dict,

@@ -59,7 +59,7 @@ class _EvaluationModelBase:
         self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = config.s_w2s, config.s2w, config.s_scale, config.s_min, config.s_max
         self.ratio = config.ratio
 
-        self.background_color = config.background_color.to(self.target_device)
+        self.background_color = config.background_color.to(self.target_device) if config.background_color is not None else None
 
     def _load_model(self, target_device: torch.device, target_dtype: torch.dtype, use_rgb):
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device, dtype=target_dtype).to(target_device)

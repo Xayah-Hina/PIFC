@@ -78,7 +78,7 @@ class _TrainModelBase:
         self.frame_start, self.frame_end = config.frame_start, config.frame_end
 
         self.tag = config.train_tag
-        self.background_color = config.background_color.to(self.target_device)
+        self.background_color = config.background_color.to(self.target_device) if config.background_color is not None else None
 
         self.config = config  # Don't use is unless save_ckpt
 
