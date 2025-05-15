@@ -134,7 +134,8 @@ class EvaluationRenderFrame(_EvaluationModelBase):
                 batch_points_time_flat_filtered = batch_points_time_flat[bbox_mask]
 
                 hidden = self.encoder_d(batch_points_time_flat_filtered)
-                raw_d = self.model_d(hidden)
+                hidden_dir = torch.cat([hidden, batch_rays_d[:, None, :].expand(batch_size_current, depth_size, 3).reshape(-1, 3).clone()[bbox_mask]], dim=-1)
+                raw_d = self.model_d(hidden_dir)
                 raw_flat = torch.zeros([batch_size_current * depth_size], device=self.target_device, dtype=self.target_dtype)
                 raw_d_flat = raw_d[..., 0].view(-1)
                 raw_flat = raw_flat.masked_scatter(bbox_mask, raw_d_flat)
