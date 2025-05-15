@@ -59,7 +59,7 @@ class _EvaluationModelBase:
         self.s_w2s, self.s2w, self.s_scale, self.s_min, self.s_max = config.s_w2s, config.s2w, config.s_scale, config.s_min, config.s_max
         self.ratio = config.ratio
 
-        self.background_color = config.background_color
+        self.background_color = config.background_color.to(self.target_device)
 
     def _load_model(self, target_device: torch.device, target_dtype: torch.dtype, use_rgb):
         self.encoder_d = HashEncoderNativeFasterBackward(device=target_device, dtype=target_dtype).to(target_device)
@@ -158,7 +158,7 @@ class EvaluationRenderFrame(_EvaluationModelBase):
                     rgb = torch.sigmoid(rgb_flat.reshape(batch_size_current, depth_size, 3))
                     rgb_map = torch.sum(weights[..., None] * rgb, dim=-2)
 
-                if self.background_color:
+                if self.background_color is not None:
                     acc_map = torch.sum(weights, -1)
                     rgb_map = rgb_map + self.background_color * (1.0 - acc_map[..., None])
 

@@ -78,7 +78,7 @@ class _TrainModelBase:
         self.frame_start, self.frame_end = config.frame_start, config.frame_end
 
         self.tag = config.train_tag
-        self.background_color = config.background_color
+        self.background_color = config.background_color.to(self.target_device)
 
         self.config = config  # Don't use is unless save_ckpt
 
@@ -247,7 +247,7 @@ class TrainDensityModel(_TrainModelBase):
             rgb = torch.sigmoid(rgb_flat.reshape(batch_size_current, depth_size, 3))
             rgb_map = torch.sum(weights[..., None] * rgb, dim=-2)
 
-        if self.background_color:
+        if self.background_color is not None:
             acc_map = torch.sum(weights, -1)
             rgb_map = rgb_map + self.background_color * (1.0 - acc_map[..., None])
 
