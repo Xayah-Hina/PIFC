@@ -52,7 +52,7 @@ class NeRFSmall(torch.nn.Module):
             self.color_net.append(torch.nn.Linear(in_dim, out_dim, bias=True, dtype=dtype))
 
     def forward(self, x):
-        h = x
+        h = x[..., :self.input_ch]
         for l in range(self.num_layers):
             h = self.sigma_net[l](h)
             h = torch.nn.functional.relu(h, inplace=True)
@@ -103,7 +103,7 @@ class NeRFSmallPotential(torch.nn.Module):
             self.out_f2 = torch.nn.Linear(hidden_dim, 3, bias=True, dtype=dtype)
 
     def forward(self, x):
-        h = x
+        h = x[..., :self.input_ch]
         for l in range(self.num_layers):
             h = self.sigma_net[l](h)
             h = torch.nn.functional.relu(h, True)
@@ -158,7 +158,7 @@ class NeRFSmall_c(torch.nn.Module):
         self.color_net = []
         for l in range(num_layers_color):
             if l == 0:
-                in_dim = geo_feat_dim
+                in_dim = geo_feat_dim + 3
             else:
                 in_dim = hidden_dim_color
 
@@ -171,13 +171,15 @@ class NeRFSmall_c(torch.nn.Module):
         self.color_net = torch.nn.ModuleList(self.color_net)
 
     def forward(self, x):
-        h = x
+        h = x[..., :self.input_ch]
+        dirs = x[..., self.input_ch:]
         for l in range(self.num_layers):
             h = self.sigma_net[l](h)
             h = torch.nn.functional.relu(h, inplace=True)
 
         sigma = h
-        color = self.color_net[0](sigma[..., 1:])
+        tmp = torch.cat([sigma[..., 1:], dirs], dim=-1)
+        color = self.color_net[0](tmp)
         for l in range(1, self.num_layers_color):
             color = torch.nn.functional.relu(color, inplace=True)
             color = self.color_net[l](color)
